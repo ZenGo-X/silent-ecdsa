@@ -171,6 +171,12 @@ impl DPF {
         }
         ECScalar::from(&output)
     }
+
+    pub fn full_eval(b: &u8, key_b: &Key) -> Vec<FE> {
+        (0..N)
+            .map(|i| DPF::eval(b, key_b, &BigInt::from(i as u32)))
+            .collect()
+    }
 }
 
 fn G(prng_in: &Vec<u8>) -> PrngOut {
