@@ -5,11 +5,19 @@ authors = [
     "Omer Shlomovits <omer.shlomovits@gmail.com>",
 ]
 edition = "2018"
-
+links = "libntl"
+build = "build.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[build-dependencies]
+bindgen = "0.59.1"
 
 
 [dependencies]
-curv = { package = "curv-kzen", version = "0.7.1", default-features = true }
 chacha20 = {version = "0.7.2", features = ["rng"]}
 rand_core = "0.6.3"
+
+
+[dependencies.curv]
+git = "https://github.com/KZen-networks/curv"
+tag = "v0.7.1"
+default-features = true
