@@ -7,6 +7,8 @@ use std::cmp::{max, min, Ordering};
 use std::convert::TryInto;
 use std::iter::FromIterator;
 use std::ops::BitXor;
+use curv::BigInt;
+use curv::elliptic::curves::secp256_k1::FE;
 
 // prng from |lambda| to |2 lambda|
 pub fn prng(key: &[u8]) -> Vec<u8> {
@@ -39,6 +41,31 @@ where
         Ordering::Equal => (),
     }
     res
+}
+
+pub fn outer_mul(u: &[FE], v: &[FE]) -> Vec<FE>{
+    let m = u.len();
+    let l = v.len();
+    let mut res = Vec::new();
+    for i in 0..m{
+        for j in 0..l{
+           res.push(u[i] * v[j])
+        }
+    }
+    return res;
+
+}
+
+pub fn outer_add(u: &[BigInt], v: &[BigInt]) -> Vec<BigInt>{
+    let m = u.len();
+    let l = v.len();
+    let mut res = Vec::new();
+    for i in 0..m{
+        for j in 0..l{
+            res.push(&u[i] + &v[j])
+        }
+    }
+    return res;
 }
 
 mod tests {

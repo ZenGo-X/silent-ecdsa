@@ -17,6 +17,7 @@ chacha20 = {version = "0.7.2", features = ["rng"]}
 rand_core = "0.6.3"
 
 
+
 [dependencies.curv]
 git = "https://github.com/KZen-networks/curv"
 tag = "v0.7.1"

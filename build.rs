@@ -7,13 +7,31 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 
-fn main() {
+fn main(){
+
+
+    let ignored_macros = IgnoreMacros(
+        vec![
+            "FP_INFINITE".into(),
+            "FP_NAN".into(),
+            "FP_NORMAL".into(),
+            "FP_SUBNORMAL".into(),
+            "FP_ZERO".into(),
+            "IPPORT_RESERVED".into(),
+        ]
+            .into_iter()
+            .collect(),
+    );
+
     // Tell cargo to tell rustc to link the system bzip2
     // shared library.
-    println!("cargo:rustc-link-lib=libntl");
-    println!("cargo:rustc-link-lib=libgmp");
+    println!("cargo:rustc-link-lib=ntl");
+    println!("cargo:rustc-link-lib=c++");
+
+    println!("cargo:rustc-link-lib=m");
+   // println!("cargo:rustc-link-lib=gmp");
     // Tell cargo to invalidate the built crate whenever the wrapper changes
-    println!("cargo:rerun-if-changed=wrapper.h");
+    println!("cargo:rerun-if-changed=wrapper.hpp");
 
     // The bindgen::Builder is the main entry point
     // to bindgen, and lets you build up options for
@@ -22,12 +40,36 @@ fn main() {
         // The input header we would like to generate
         // bindings for.
         .header("wrapper.hpp")
-        .clang_arg("--std=c++14")
+        .clang_arg("-std=c++14")
+
+
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
-        .generate_inline_functions(false)
+
+        //  .generate_inline_functions(false)
         // Finish the builder and generate the bindings.
+           .allowlist_recursively(true)
+
+        .allowlist_type("*.ZZ_p.*")
+        .allowlist_type("*.ZZ_pX.*")
+        .allowlist_function("*.ZZFromBytes.*")
+        .allowlist_type("*.ZZ.*")
+        .allowlist_function("*.ZZ_p_init.*")
+        .allowlist_function("*.to_ZZ_p.*")
+          .allowlist_function("*.mul.*")
+        .blocklist_type("*.Mat_value_type.*")
+        .blocklist_type("*.Mat_reference.*")
+        .blocklist_type("*.Mat_const_reference.*")
+        .blocklist_type("*.OptionalVal.*")
+        .blocklist_type("*.ZZ_pXModulus.*")
+        .blocklist_type("*.ZZ_pX_modulus.*")
+        .blocklist_function("*.ZZ_pXModulus.*")
+        .blocklist_type("*ZZ_pXMultiplier.*")
+        .blocklist_type("*ZZ_pX_multiplier.*")
+        .blocklist_function("*ZZ_pXMultiplier.*")
+        .parse_callbacks(Box::new(ignored_macros))
+        .rustfmt_bindings(true)
+        .generate_inline_functions(true)
         .generate()
         // Unwrap the Result and panic on failure.
         .expect("Unable to generate bindings");
@@ -137,7 +179,7 @@ fn main() {
 
 }
 */
-/*
+
 #[derive(Debug)]
 struct IgnoreMacros(HashSet<String>);
 
@@ -150,4 +192,3 @@ impl bindgen::callbacks::ParseCallbacks for IgnoreMacros {
         }
     }
 }
-*/
