@@ -1,8 +1,7 @@
 use crate::dpf::{Key, DPF};
 use crate::N;
 use curv::arithmetic::Zero;
-use curv::elliptic::curves::secp256_k1::FE;
-use curv::elliptic::curves::traits::ECScalar;
+use curv::elliptic::curves::{Scalar, Secp256k1};
 use curv::BigInt;
 
 pub struct DSPF {
@@ -10,7 +9,7 @@ pub struct DSPF {
 }
 
 impl DSPF {
-    pub fn gen(alpha_vec: &[BigInt], beta_vec: &[FE]) -> (Self, Self) {
+    pub fn gen(alpha_vec: &[BigInt], beta_vec: &[Scalar<Secp256k1>]) -> (Self, Self) {
         // TODO: make sure there are no repetitions in alpha_vec?
         let t = alpha_vec.len();
         assert_eq!(t, beta_vec.len());
@@ -25,19 +24,19 @@ impl DSPF {
         (DSPF { key: key0 }, DSPF { key: key1 })
     }
 
-    pub fn eval(&self, b: &u8, x: &BigInt) -> FE {
+    pub fn eval(&self, b: &u8, x: &BigInt) -> Scalar<Secp256k1> {
         assert!(x < &BigInt::from(N as u32));
         assert!(x >= &BigInt::zero());
-        self.key
-            .iter()
-            .fold(FE::zero(), |acc, dpf_key| acc + DPF::eval(b, dpf_key, x))
+        self.key.iter().fold(Scalar::zero(), |acc, dpf_key| {
+            acc + DPF::eval(b, dpf_key, x)
+        })
     }
 
-    pub fn full_eval(&self, b: &u8) -> Vec<FE> {
-        let zero_vec = vec![FE::zero(); N];
+    pub fn full_eval(&self, b: &u8) -> Vec<Scalar<Secp256k1>> {
+        let zero_vec = vec![Scalar::zero(); N];
         self.key.iter().fold(zero_vec, |acc, dpf_key| {
             let dpf_i_full_eval = DPF::full_eval(b, dpf_key);
-            (0..N).map(|i| acc[i] + dpf_i_full_eval[i]).collect()
+            (0..N).map(|i| &acc[i] + &dpf_i_full_eval[i]).collect()
         })
     }
 }
@@ -45,19 +44,14 @@ impl DSPF {
 mod tests {
     use crate::dspf::DSPF;
     use crate::N;
-    use curv::elliptic::curves::secp256_k1::FE;
-    use curv::elliptic::curves::traits::ECScalar;
+    use curv::elliptic::curves::{Scalar, Secp256k1};
     use curv::BigInt;
 
     #[test]
     fn test_simple_dspf_eval_and_full_eval() {
         let alpha_vec = &[BigInt::from(10), BigInt::from(20), BigInt::from(30)].to_vec();
-        let beta_vec: &[FE] = &[
-            ECScalar::new_random(),
-            ECScalar::new_random(),
-            ECScalar::new_random(),
-        ]
-        .to_vec();
+        let beta_vec: &[Scalar<Secp256k1>] =
+            &[Scalar::random(), Scalar::random(), Scalar::random()].to_vec();
         let mut fe0_vec = Vec::new();
         let mut fe1_vec = Vec::new();
 
@@ -76,7 +70,10 @@ mod tests {
             } else if x_bn == alpha_vec[2] {
                 assert_eq!(fe0 + fe1, beta_vec[2]);
             } else {
-                assert_eq!(fe0.to_big_int(), FE::q() - fe1.to_big_int());
+                assert_eq!(
+                    fe0.to_bigint(),
+                    Scalar::<Secp256k1>::group_order() - fe1.to_bigint()
+                );
             }
         }
         let p0_shares = key0.full_eval(&0u8);

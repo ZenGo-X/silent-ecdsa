@@ -2,13 +2,13 @@
 
 use crate::LAMBDA_BYTES_LEN;
 use chacha20::ChaCha20Rng;
+use curv::elliptic::curves::{Scalar, Secp256k1};
+use curv::BigInt;
 use rand_core::{RngCore, SeedableRng};
 use std::cmp::{max, min, Ordering};
 use std::convert::TryInto;
 use std::iter::FromIterator;
 use std::ops::BitXor;
-use curv::BigInt;
-use curv::elliptic::curves::secp256_k1::FE;
 
 // prng from |lambda| to |2 lambda|
 pub fn prng(key: &[u8]) -> Vec<u8> {
@@ -43,25 +43,24 @@ where
     res
 }
 
-pub fn outer_mul(u: &[FE], v: &[FE]) -> Vec<FE>{
+pub fn outer_mul(u: &[Scalar<Secp256k1>], v: &[Scalar<Secp256k1>]) -> Vec<Scalar<Secp256k1>> {
     let m = u.len();
     let l = v.len();
     let mut res = Vec::new();
-    for i in 0..m{
-        for j in 0..l{
-           res.push(u[i] * v[j])
+    for i in 0..m {
+        for j in 0..l {
+            res.push(&u[i] * &v[j])
         }
     }
     return res;
-
 }
 
-pub fn outer_add(u: &[BigInt], v: &[BigInt]) -> Vec<BigInt>{
+pub fn outer_add(u: &[BigInt], v: &[BigInt]) -> Vec<BigInt> {
     let m = u.len();
     let l = v.len();
     let mut res = Vec::new();
-    for i in 0..m{
-        for j in 0..l{
+    for i in 0..m {
+        for j in 0..l {
             res.push(&u[i] + &v[j])
         }
     }

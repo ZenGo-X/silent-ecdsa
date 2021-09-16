@@ -4,8 +4,7 @@
 use crate::utils::{prng, xor};
 use crate::{LAMBDA, LAMBDA_BYTES_LEN, N};
 use curv::arithmetic::{Converter, Modulo, One, Samplable, Zero};
-use curv::elliptic::curves::secp256_k1::FE;
-use curv::elliptic::curves::traits::ECScalar;
+use curv::elliptic::curves::{Scalar, Secp256k1};
 use curv::BigInt;
 
 #[derive(Clone, Debug)]
@@ -23,7 +22,7 @@ pub struct CWi {
     pub t_CW_R: u8,
 }
 
-pub struct CWnp1(FE);
+pub struct CWnp1(Scalar<Secp256k1>);
 
 pub struct Key {
     pub s_i_0: Vec<u8>,
@@ -34,7 +33,7 @@ pub struct Key {
 pub struct DPF;
 
 impl DPF {
-    pub fn gen(alpha: &BigInt, beta: &FE) -> (Key, Key) {
+    pub fn gen(alpha: &BigInt, beta: &Scalar<Secp256k1>) -> (Key, Key) {
         let mut s_0_0 = BigInt::sample(LAMBDA * 2).to_bytes()[0..LAMBDA_BYTES_LEN].to_vec();
         let mut s_1_0 = BigInt::sample(LAMBDA * 2).to_bytes()[0..LAMBDA_BYTES_LEN].to_vec();
 
@@ -107,11 +106,11 @@ impl DPF {
         let s_0_n_fe = convert(s_0_n);
         let s_1_n_fe = convert(s_1_n);
 
-        let mut CW_n_plus_1 = s_1_n_fe + beta.sub(&s_0_n_fe.get_element());
+        let mut CW_n_plus_1 = s_1_n_fe + beta - &s_0_n_fe;
 
         CW_n_plus_1 = if t_1_n == 1u8 {
-            let neg_cw_bn = FE::q() - CW_n_plus_1.to_big_int();
-            ECScalar::from(&neg_cw_bn)
+            let neg_cw_bn = Scalar::<Secp256k1>::group_order() - CW_n_plus_1.to_bigint();
+            Scalar::from(&neg_cw_bn)
         } else {
             CW_n_plus_1
         };
@@ -128,7 +127,7 @@ impl DPF {
         (key0, key1)
     }
 
-    pub fn eval(b: &u8, key_b: &Key, x: &BigInt) -> FE {
+    pub fn eval(b: &u8, key_b: &Key, x: &BigInt) -> Scalar<Secp256k1> {
         assert!(b <= &1u8);
         let mut s_i_minus_1 = key_b.s_i_0.clone();
         let mut t_i_minus_1 = b.clone();
@@ -162,17 +161,25 @@ impl DPF {
         let s_n = s_i_minus_1.clone();
         let t_n = t_i_minus_1.clone();
         let t_n_bn = BigInt::from_bytes(&[t_n]);
-        let t_n_cw_n1 = BigInt::mod_mul(&key_b.CW_n_plus_1.0.to_big_int(), &t_n_bn, &FE::q());
+        let t_n_cw_n1 = BigInt::mod_mul(
+            &key_b.CW_n_plus_1.0.to_bigint(),
+            &t_n_bn,
+            &Scalar::<Secp256k1>::group_order(),
+        );
 
-        let mut output = BigInt::mod_add(&convert(s_n).to_big_int(), &t_n_cw_n1, &FE::q());
+        let mut output = BigInt::mod_add(
+            &convert(s_n).to_bigint(),
+            &t_n_cw_n1,
+            &Scalar::<Secp256k1>::group_order(),
+        );
 
         if b == &1u8 {
-            output = FE::q() - output;
+            output = Scalar::<Secp256k1>::group_order() - output;
         }
-        ECScalar::from(&output)
+        Scalar::from(&output)
     }
 
-    pub fn full_eval(b: &u8, key_b: &Key) -> Vec<FE> {
+    pub fn full_eval(b: &u8, key_b: &Key) -> Vec<Scalar<Secp256k1>> {
         (0..N)
             .map(|i| DPF::eval(b, key_b, &BigInt::from(i as u32)))
             .collect()
@@ -193,10 +200,10 @@ fn G(prng_in: &Vec<u8>) -> PrngOut {
 }
 
 // figure 3 in the paper. takes s and converts to Fq
-fn convert(s: Vec<u8>) -> FE {
+fn convert(s: Vec<u8>) -> Scalar<Secp256k1> {
     let fe_vec = prng(&s);
     let bn = BigInt::from_bytes(&fe_vec[..]);
-    ECScalar::from(&bn)
+    Scalar::from(&bn)
 }
 
 // takes  [s1||t1||s2||t2] and outputs s1,t1,s2,t2
@@ -233,14 +240,13 @@ fn concat_s_t_values(s1: &Vec<u8>, t1: &u8, s2: &Vec<u8>, t2: &u8) -> Vec<u8> {
 mod tests {
     use crate::dpf::DPF;
     use crate::N;
-    use curv::elliptic::curves::secp256_k1::FE;
-    use curv::elliptic::curves::traits::ECScalar;
+    use curv::elliptic::curves::{Scalar, Secp256k1};
     use curv::BigInt;
 
     #[test]
     fn test_simple_dpf() {
         let alpha = BigInt::from(10);
-        let beta = ECScalar::new_random();
+        let beta = Scalar::random();
         let (key0, key1) = DPF::gen(&alpha, &beta);
         for x in 0..N {
             let x_bn = BigInt::from(x as u32);
@@ -249,7 +255,10 @@ mod tests {
             if x_bn == alpha {
                 assert_eq!(fe0 + fe1, beta);
             } else {
-                assert_eq!(fe0.to_big_int(), FE::q() - fe1.to_big_int());
+                assert_eq!(
+                    fe0.to_bigint(),
+                    Scalar::<Secp256k1>::group_order() - fe1.to_bigint()
+                );
             }
         }
     }
