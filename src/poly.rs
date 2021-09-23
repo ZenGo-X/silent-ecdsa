@@ -10,7 +10,7 @@ pub fn poly_mul(a: &[BigInt], b: &[BigInt]) -> Vec<BigInt> {
     let c: Vec<_> = (0..2 * n - 1)
         .map(|i| {
             let mut acc = BigInt::zero();
-            let mut tmp = BigInt::zero();
+            let mut tmp;
             for j in 0..=i {
                 tmp = BigInt::zero();
                 if j < n && i - j < n {
@@ -39,7 +39,7 @@ pub fn poly_mul_fft(a: &[BigInt], b: &[BigInt]) -> Vec<BigInt> {
     let mut F_points_vec = a.to_vec();
     let mut G_points_vec = b.to_vec();
     assert_eq!(F_points_vec.len(), G_points_vec.len());
-    for i in 0..n_elements - F_points_vec.len() {
+    for _ in 0..n_elements - F_points_vec.len() {
         F_points_vec.push(BigInt::zero());
         G_points_vec.push(BigInt::zero());
     }
@@ -62,7 +62,6 @@ mod tests {
     use crate::fft::{bit_rev_radix_2_intt, bit_rev_radix_2_ntt};
     use crate::poly::{poly_mul, poly_mul_fft};
     use curv::arithmetic::{Converter, Modulo, One, Samplable, Zero};
-    use curv::cryptographic_primitives::secret_sharing::Polynomial;
     use curv::elliptic::curves::{Scalar, Secp256k1};
     use curv::BigInt;
     use std::time::Instant;

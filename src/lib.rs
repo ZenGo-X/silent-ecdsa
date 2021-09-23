@@ -6,11 +6,16 @@ mod dpf;
 pub mod dspf;
 pub mod fft;
 mod poly;
+#[macro_use]
 mod utils;
+mod keygen;
 
 const LAMBDA: usize = 128;
 const LAMBDA_BYTES_LEN: usize = LAMBDA / 8;
 const N: usize = 32;
+const t: usize = N / 4; // todo: validate
+const c: usize = 1; // todo: validate
+const n: usize = 2; // num of parties
 
 #[cfg(test)]
 #[macro_use(quickcheck)]

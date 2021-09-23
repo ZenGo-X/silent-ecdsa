@@ -2,8 +2,8 @@
 
 use crate::LAMBDA_BYTES_LEN;
 use chacha20::ChaCha20Rng;
-use curv::elliptic::curves::{Scalar, Secp256k1};
-use curv::BigInt;
+//use curv::elliptic::curves::{Scalar, Secp256k1};
+//use curv::BigInt;
 use rand_core::{RngCore, SeedableRng};
 use std::cmp::{max, min, Ordering};
 use std::convert::TryInto;
@@ -42,7 +42,7 @@ where
     }
     res
 }
-
+/*
 pub fn outer_mul(u: &[Scalar<Secp256k1>], v: &[Scalar<Secp256k1>]) -> Vec<Scalar<Secp256k1>> {
     let m = u.len();
     let l = v.len();
@@ -65,6 +65,19 @@ pub fn outer_add(u: &[BigInt], v: &[BigInt]) -> Vec<BigInt> {
         }
     }
     return res;
+}
+
+ */
+
+#[macro_export]
+macro_rules! make_array {
+    ($n:expr, $constructor:expr) => {{
+        let mut items: [_; $n] = mem::MaybeUninit::uninit().assume_init();
+        for (_, place) in items.iter_mut().enumerate() {
+            ptr::write(place, $constructor);
+        }
+        items
+    }};
 }
 
 mod tests {
