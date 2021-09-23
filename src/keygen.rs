@@ -32,12 +32,12 @@ impl LongTermKey {
             eta_i: unsafe { make_array!(c * t, BigInt::zero()) },
             beta_i: unsafe { make_array!(c * t, Scalar::zero()) },
             gamma_i: unsafe { make_array!(c * t, Scalar::zero()) },
-            u_i_0: unsafe { make_array!(c * (n - 1), DSPF::init(c * (n - 1))) },
-            u_i_1: unsafe { make_array!(c * (n - 1), DSPF::init(c * (n - 1))) },
-            v_i_0: unsafe { make_array!(c * (n - 1), DSPF::init(c * (n - 1))) },
-            v_i_1: unsafe { make_array!(c * (n - 1), DSPF::init(c * (n - 1))) },
-            c_i_0: unsafe { make_array!(c * c * (n - 1), DSPF::init(c * c * (n - 1))) },
-            c_i_1: unsafe { make_array!(c * c * (n - 1), DSPF::init(c * c * (n - 1))) },
+            u_i_0: unsafe { make_array!(c * (n - 1), DSPF::init(t*c * (n - 1))) },
+            u_i_1: unsafe { make_array!(c * (n - 1), DSPF::init(t*c * (n - 1))) },
+            v_i_0: unsafe { make_array!(c * (n - 1), DSPF::init(t*c * (n - 1))) },
+            v_i_1: unsafe { make_array!(c * (n - 1), DSPF::init(t*c * (n - 1))) },
+            c_i_0: unsafe { make_array!(c * c * (n - 1), DSPF::init(t*t*c * c * (n - 1))) },
+            c_i_1: unsafe { make_array!(c * c * (n - 1), DSPF::init(t*t*c * c * (n - 1))) },
         }
     }
 
