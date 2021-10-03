@@ -52,6 +52,7 @@ fn lc(poly: &Polynomial<Secp256k1>) -> Scalar<Secp256k1> {
     poly.coefficients()[poly.degree() as usize].clone()
 }
 
+
 // wrapper around poly_mul
 pub fn poly_mul_f(a: &[Scalar<Secp256k1>], b: &[Scalar<Secp256k1>]) -> Vec<Scalar<Secp256k1>> {
     let a_bn: Vec<_> = a.iter().map(|f_a| f_a.to_bigint()).collect();
