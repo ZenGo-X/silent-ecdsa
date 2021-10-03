@@ -42,6 +42,7 @@ where
     }
     res
 }
+
 /*
 pub fn outer_mul(u: &[Scalar<Secp256k1>], v: &[Scalar<Secp256k1>]) -> Vec<Scalar<Secp256k1>> {
     let m = u.len();

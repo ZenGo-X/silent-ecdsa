@@ -1,8 +1,108 @@
 use crate::fft::{bit_rev_radix_2_intt, bit_rev_radix_2_ntt};
 use curv::arithmetic::{Converter, Modulo, Zero};
+use curv::cryptographic_primitives::secret_sharing::Polynomial;
 use curv::elliptic::curves::{Scalar, Secp256k1};
 use curv::BigInt;
+use std::ops::Add;
 
+// a mod (b) = (d,r)  such that a = b*d + r
+pub fn poly_mod(
+    a: &[Scalar<Secp256k1>],
+    b: &[Scalar<Secp256k1>],
+) -> (Vec<Scalar<Secp256k1>>, Vec<Scalar<Secp256k1>>) {
+    let a_poly = Polynomial::from_coefficients(a.to_vec());
+    let b_poly = Polynomial::from_coefficients(b.to_vec());
+    let b_deg = b_poly.degree();
+    assert!(b_poly.degree() > 0);
+    if a_poly.degree() < b_poly.degree() {
+        return (
+            [Scalar::<Secp256k1>::zero()].to_vec(),
+            a_poly.coefficients().to_vec(),
+        );
+    }
+    let lc_inv = b_poly.coefficients()[b_poly.degree() as usize]
+        .clone()
+        .invert()
+        .unwrap();
+    let mut coef =
+        vec![Scalar::<Secp256k1>::zero(); (a_poly.degree() - b_poly.degree() + 1) as usize];
+    let mut reminder_poly = a_poly.clone();
+    let mut reminder_coef = reminder_poly.coefficients().to_vec();
+
+    while reminder_poly.degree() >= b_poly.degree() {
+        let d = reminder_poly.degree() as usize - b_deg as usize;
+        let c = &lc(&reminder_poly) * &lc_inv;
+        for i in 0..b_deg as usize {
+            reminder_coef[i + d] = &reminder_coef[i + d] - &c * &b_poly.coefficients().to_vec()[i];
+        }
+        reminder_coef.pop();
+        for j in 0..reminder_coef.len() {
+            if reminder_coef[reminder_coef.len() - 1 - j] == Scalar::zero() {
+                reminder_coef.pop();
+            }
+        }
+        reminder_poly = Polynomial::from_coefficients(reminder_coef.clone());
+        coef[d] = c;
+    }
+    return (coef, reminder_coef);
+}
+
+// largest coefficient
+fn lc(poly: &Polynomial<Secp256k1>) -> Scalar<Secp256k1> {
+    poly.coefficients()[poly.degree() as usize].clone()
+}
+/*
+
+        let prime = self.prime.clone();
+        let lc_inv = modulo_inverse::<T>(other.lc().unwrap().clone(), prime.clone()).unwrap();
+        let mut coef = vec![T::zero(); self.len() - other.len() + 1];
+        while self.deg() >= other.deg() {
+            let d = self.deg().unwrap() - g_deg;
+            let c = mul_mod::<T>(self.lc().unwrap(), &lc_inv, &prime);
+            for i in 0..other.len() - 1 {
+                self.coef[i + d] = &(&self.coef[i + d] - &(&c * &other.coef[i])) % &prime;
+            }
+            self.coef.pop(); // new deg < prev deg
+            self.trim_zero();
+            coef[d] = c;
+        }
+        Self {
+            coef,
+            prime: self.prime.clone(),
+        }
+    }
+}
+
+        let g_deg = other.deg().expect("Division by zero");
+        if self.deg() < other.deg() {
+            let prime = if self.prime.is_zero() {
+                other.prime.clone()
+            } else {
+                self.prime.clone()
+            };
+            return Self::new(Vec::new(), prime);
+        }
+
+ */
+// wrapper around poly_mul
+pub fn poly_mul_f(a: &[Scalar<Secp256k1>], b: &[Scalar<Secp256k1>]) -> Vec<Scalar<Secp256k1>> {
+    let a_bn: Vec<_> = a.iter().map(|f_a| f_a.to_bigint()).collect();
+    let b_bn: Vec<_> = b.iter().map(|f_b| f_b.to_bigint()).collect();
+    // todo: propagate errors
+    let c = poly_mul(&a_bn[..], &b_bn[..]);
+    let c_f: Vec<_> = c
+        .iter()
+        .map(|c_bn| Scalar::<Secp256k1>::from_bigint(c_bn))
+        .collect();
+    c_f
+}
+
+pub fn poly_add_f(a: &[Scalar<Secp256k1>], b: &[Scalar<Secp256k1>]) -> Vec<Scalar<Secp256k1>> {
+    let a_poly = Polynomial::from_coefficients(a.to_vec());
+    let b_poly = Polynomial::from_coefficients(b.to_vec());
+    let c_poly = a_poly.add(&b_poly);
+    c_poly.coefficients().to_vec()
+}
 // c = a * b
 pub fn poly_mul(a: &[BigInt], b: &[BigInt]) -> Vec<BigInt> {
     assert_eq!(a.len(), b.len());
@@ -60,8 +160,9 @@ pub fn poly_mul_fft(a: &[BigInt], b: &[BigInt]) -> Vec<BigInt> {
 mod tests {
 
     use crate::fft::{bit_rev_radix_2_intt, bit_rev_radix_2_ntt};
-    use crate::poly::{poly_mul, poly_mul_fft};
+    use crate::poly::{poly_mod, poly_mul, poly_mul_f, poly_mul_fft};
     use curv::arithmetic::{Converter, Modulo, One, Samplable, Zero};
+    use curv::cryptographic_primitives::secret_sharing::Polynomial;
     use curv::elliptic::curves::{Scalar, Secp256k1};
     use curv::BigInt;
     use std::time::Instant;
@@ -227,5 +328,24 @@ mod tests {
         }
         println!("duration simple: {:?}", dur_av_simple);
         println!("duration fft: {:?}", dur_av_fft);
+    }
+
+    #[test]
+    fn test_poly_mod() {
+        let a: Vec<_> = (0..32).map(|_| Scalar::<Secp256k1>::random()).collect();
+        let b: Vec<_> = (0..25).map(|_| Scalar::<Secp256k1>::random()).collect();
+        let (mut d, r) = poly_mod(&a, &b);
+        for _ in 0..(b.len() - d.len()) {
+            d.push(Scalar::zero());
+        }
+        let dq = poly_mul_f(&d[..], &b[..]);
+        let dq_poly = Polynomial::from_coefficients(dq);
+        let r_poly = Polynomial::from_coefficients(r);
+        let dq_plus_r = &dq_poly + &r_poly;
+        let mut dq_plus_r_coef = dq_plus_r.coefficients().to_vec();
+        for _ in 0..dq_plus_r_coef.len() - a.len() {
+            dq_plus_r_coef.pop();
+        }
+        assert_eq!(dq_plus_r_coef, a.to_vec());
     }
 }
