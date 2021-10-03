@@ -51,39 +51,7 @@ pub fn poly_mod(
 fn lc(poly: &Polynomial<Secp256k1>) -> Scalar<Secp256k1> {
     poly.coefficients()[poly.degree() as usize].clone()
 }
-/*
 
-        let prime = self.prime.clone();
-        let lc_inv = modulo_inverse::<T>(other.lc().unwrap().clone(), prime.clone()).unwrap();
-        let mut coef = vec![T::zero(); self.len() - other.len() + 1];
-        while self.deg() >= other.deg() {
-            let d = self.deg().unwrap() - g_deg;
-            let c = mul_mod::<T>(self.lc().unwrap(), &lc_inv, &prime);
-            for i in 0..other.len() - 1 {
-                self.coef[i + d] = &(&self.coef[i + d] - &(&c * &other.coef[i])) % &prime;
-            }
-            self.coef.pop(); // new deg < prev deg
-            self.trim_zero();
-            coef[d] = c;
-        }
-        Self {
-            coef,
-            prime: self.prime.clone(),
-        }
-    }
-}
-
-        let g_deg = other.deg().expect("Division by zero");
-        if self.deg() < other.deg() {
-            let prime = if self.prime.is_zero() {
-                other.prime.clone()
-            } else {
-                self.prime.clone()
-            };
-            return Self::new(Vec::new(), prime);
-        }
-
- */
 // wrapper around poly_mul
 pub fn poly_mul_f(a: &[Scalar<Secp256k1>], b: &[Scalar<Secp256k1>]) -> Vec<Scalar<Secp256k1>> {
     let a_bn: Vec<_> = a.iter().map(|f_a| f_a.to_bigint()).collect();
