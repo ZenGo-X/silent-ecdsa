@@ -3,8 +3,9 @@ use crate::N;
 use curv::arithmetic::Zero;
 use curv::elliptic::curves::{Scalar, Secp256k1};
 use curv::BigInt;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DSPF {
     pub key: Vec<DPF>,
 }

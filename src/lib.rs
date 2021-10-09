@@ -10,6 +10,7 @@ mod poly;
 mod utils;
 mod keygen;
 mod sign;
+mod tests;
 
 const LAMBDA: usize = 128;
 const LAMBDA_BYTES_LEN: usize = LAMBDA / 8;

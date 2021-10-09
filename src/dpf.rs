@@ -7,6 +7,7 @@ use curv::arithmetic::{Converter, Modulo, One, Samplable, Zero};
 use curv::elliptic::curves::{Scalar, Secp256k1};
 use curv::BigInt;
 use std::convert::TryInto;
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug)]
 pub struct PrngOut {
@@ -16,7 +17,7 @@ pub struct PrngOut {
     pub t_i_R: u8,
 }
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy,  Serialize, Deserialize)]
 pub struct CWi {
     pub s_CW: [u8; LAMBDA_BYTES_LEN],
     pub t_CW_L: u8,
@@ -33,17 +34,17 @@ impl CWi {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone,  Serialize, Deserialize)]
 pub struct CWnp1(Scalar<Secp256k1>);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Key {
     pub s_i_0: [u8; LAMBDA_BYTES_LEN],
     pub CW_n_plus_1: CWnp1,
     pub CWs: [CWi; N],
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DPF(pub(crate) Key);
 
 impl DPF {

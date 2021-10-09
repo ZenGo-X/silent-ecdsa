@@ -11,7 +11,7 @@ use curv::cryptographic_primitives::secret_sharing::Polynomial;
 use std::ops::Add;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LongTermKey {
     pub alpha_i: Scalar<Secp256k1>,
     pub sk_i: Scalar<Secp256k1>,
@@ -37,17 +37,7 @@ pub struct Tuple {
     pub K_j_i: [[Scalar<Secp256k1>; N]; n - 1],
 }
 
-#[derive(Debug)]
-pub struct SigningKey{
-    pub alpha_i: Scalar<Secp256k1>,
-    pub sk_i: Scalar<Secp256k1>,
-    pub x_i : Scalar<Secp256k1>,
-    pub y_i : Scalar<Secp256k1>,
-    pub z_i : Scalar<Secp256k1>,
-    pub d_i : Scalar<Secp256k1>,
-    pub M_i_j : Vec<Scalar<Secp256k1>>,
-    pub K_j_i : Vec<Scalar<Secp256k1>>,
-}
+
 
 impl LongTermKey {
     fn init() -> Self {
@@ -65,6 +55,17 @@ impl LongTermKey {
             c_i_0: unsafe { make_array!(c * c, make_array!((n - 1), DSPF::init(t * t * (n - 1)))) },
             c_i_1: unsafe { make_array!(c * c, make_array!((n - 1), DSPF::init(t * t * (n - 1)))) },
         }
+    }
+
+    // todo: compute from seed, should be a random oracle
+    pub fn sample_a() -> [[Scalar<Secp256k1>; N]; c] {
+        let mut a: [[Scalar<Secp256k1>; N]; c] =
+            unsafe { make_array!(c, make_array!(N, Scalar::<Secp256k1>::zero())) };
+        for i in 0..c - 1 {
+            a[i] = pick_R();
+        }
+        a[c - 1][0] = Scalar::from_bigint(&BigInt::one());
+        a
     }
 
     pub fn trusted_key_gen() -> [Self; n] {
@@ -138,23 +139,19 @@ impl LongTermKey {
             }
         }
 
+        // write down keys to files
+    //    for id in 0..n {
+    //        let long_term_key_json = serde_json::to_string(&long_term_keys[id]).unwrap();
+    //        fs::write("long_term_key_".to_string().add(&id.to_string()), long_term_key_json).expect("Unable to save !");
+    //    }
         return long_term_keys;
     }
 
 
-    // todo: compute from seed, should be a random oracle
-    pub fn sample_a() -> [[Scalar<Secp256k1>; N]; c] {
-        let mut a: [[Scalar<Secp256k1>; N]; c] =
-            unsafe { make_array!(c, make_array!(N, Scalar::<Secp256k1>::zero())) };
-        for i in 0..c - 1 {
-            a[i] = pick_R();
-        }
-        a[c - 1][0] = Scalar::from_bigint(&BigInt::one());
-        a
-    }
-
-
-    pub fn get_tuple(&self, a: [[Scalar<Secp256k1>; N]; c], f_x: &Polynomial<Secp256k1>, id: usize) -> Tuple {
+    pub fn get_tuple(&self, a: [[Scalar<Secp256k1>; N]; c], f_x: &Polynomial<Secp256k1>, id: usize)  {
+    //    let data = fs::read_to_string("long_term_key_".to_string().add(&id.to_string()))
+    //        .expect("Unable to load long term key, did you run get keygen first? ");
+    //    let key: LongTermKey = serde_json::from_str(&data).unwrap();
         let mut M_i_j: [[Scalar<Secp256k1>; N]; n - 1] =
             unsafe { make_array!(n - 1, make_array!(N, Scalar::zero())) };
         let mut K_j_i: [[Scalar<Secp256k1>; N]; n - 1] =
@@ -242,43 +239,12 @@ impl LongTermKey {
             M_i_j,
             K_j_i,
         };
-        let tuple_json = serde_json::to_string(&tuple).unwrap();
+        let tuple_json = serde_json::to_string(&(tuple, self.alpha_i.clone(), self.sk_i.clone())).unwrap();
         fs::write("tuple_".to_string().add(&id.to_string()), tuple_json).expect("Unable to save !");
-        tuple
     }
 
 
-    pub fn get_key_from_tuple(&self, id: usize)-> SigningKey{
-        let data = fs::read_to_string("tuple_".to_string().add(&id.to_string()))
-            .expect("Unable to load Tuple, did you run get tuple first? ");
-        let tuple: Tuple = serde_json::from_str(&data).unwrap();
-        let rand_point = Scalar::<Secp256k1>::random();
-        let x_i = Polynomial::from_coefficients(tuple.x_i.clone().to_vec()).evaluate(&rand_point);
-        let y_i = Polynomial::from_coefficients(tuple.y_i.clone().to_vec()).evaluate(&rand_point);
-        let z_i = Polynomial::from_coefficients(tuple.z_i.clone().to_vec()).evaluate(&rand_point);
-        let d_i = Polynomial::from_coefficients(tuple.d_i.clone().to_vec()).evaluate(&rand_point);
-        let mut M_i_j : Vec<Scalar<Secp256k1>>  = Vec::new();
-        let mut K_j_i : Vec<Scalar<Secp256k1>>  = Vec::new();
-        for i in 0..n-1{
-            M_i_j.push(
-                Polynomial::from_coefficients(tuple.M_i_j[i].clone().to_vec()).evaluate(&rand_point)
-            );
-            K_j_i.push(
-                Polynomial::from_coefficients(tuple.K_j_i[i].clone().to_vec()).evaluate(&rand_point)
-            );
-        }
-        return SigningKey{
-            alpha_i: self.alpha_i.clone(),
-            sk_i: self.sk_i.clone(),
-            x_i,
-            y_i,
-            z_i,
-            d_i,
-            M_i_j,
-            K_j_i,
-        }
 
-    }
 
 
 }
@@ -370,20 +336,4 @@ fn outer_sum(u: &[BigInt], v: &[BigInt]) -> Vec<BigInt> {
         }
     }
     output.to_vec()
-}
-
-mod tests {
-    use crate::keygen::{LongTermKey, pick_f_x};
-
-    #[test]
-    fn test_run_keygen() {
-        let key = LongTermKey::trusted_key_gen();
-        let a = LongTermKey::sample_a();
-        let f_x = pick_f_x();
-        let tuple1 = key[0].get_tuple(a, &f_x, 0);
-        let key1 = key[0].get_key_from_tuple( 0);
-
-
-        //  assert!(false);
-    }
 }
