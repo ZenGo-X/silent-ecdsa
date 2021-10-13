@@ -1,15 +1,15 @@
 use crate::dspf::DSPF;
-use crate::poly::{poly_add_f, poly_mul_f, poly_mod};
+use crate::poly::{poly_add_f, poly_mod, poly_mul_f};
 use crate::{c, n, t, N};
 use curv::arithmetic::{Converter, One, Samplable, Zero};
+use curv::cryptographic_primitives::secret_sharing::Polynomial;
 use curv::elliptic::curves::{Scalar, Secp256k1};
 use curv::BigInt;
-use std::convert::TryInto;
-use std::{mem, fs};
-use std::ptr;
-use curv::cryptographic_primitives::secret_sharing::Polynomial;
-use std::ops::Add;
 use serde::{Deserialize, Serialize};
+use std::convert::TryInto;
+use std::ops::Add;
+use std::ptr;
+use std::{fs, mem};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LongTermKey {
@@ -36,8 +36,6 @@ pub struct Tuple {
     pub M_i_j: [[Scalar<Secp256k1>; N]; n - 1],
     pub K_j_i: [[Scalar<Secp256k1>; N]; n - 1],
 }
-
-
 
 impl LongTermKey {
     fn init() -> Self {
@@ -72,6 +70,7 @@ impl LongTermKey {
         let mut long_term_keys = unsafe { make_array!(n, LongTermKey::init()) };
         for i in 0..n {
             long_term_keys[i].alpha_i = Scalar::<Secp256k1>::random();
+            //   long_term_keys[i].alpha_i = Scalar::from_bigint(&BigInt::one());
             long_term_keys[i].sk_i = Scalar::<Secp256k1>::random();
         }
 
@@ -113,6 +112,7 @@ impl LongTermKey {
                 }
             }
         }
+
         for i in 0..n {
             for j in 0..n {
                 for r in 0..c {
@@ -140,18 +140,22 @@ impl LongTermKey {
         }
 
         // write down keys to files
-    //    for id in 0..n {
-    //        let long_term_key_json = serde_json::to_string(&long_term_keys[id]).unwrap();
-    //        fs::write("long_term_key_".to_string().add(&id.to_string()), long_term_key_json).expect("Unable to save !");
-    //    }
+        //    for id in 0..n {
+        //        let long_term_key_json = serde_json::to_string(&long_term_keys[id]).unwrap();
+        //        fs::write("long_term_key_".to_string().add(&id.to_string()), long_term_key_json).expect("Unable to save !");
+        //    }
         return long_term_keys;
     }
 
-
-    pub fn get_tuple(&self, a: [[Scalar<Secp256k1>; N]; c], f_x: &Polynomial<Secp256k1>, id: usize)  {
-    //    let data = fs::read_to_string("long_term_key_".to_string().add(&id.to_string()))
-    //        .expect("Unable to load long term key, did you run get keygen first? ");
-    //    let key: LongTermKey = serde_json::from_str(&data).unwrap();
+    pub fn get_tuple(
+        &self,
+        a: [[Scalar<Secp256k1>; N]; c],
+        f_x: &Polynomial<Secp256k1>,
+        id: usize,
+    ) {
+        //    let data = fs::read_to_string("long_term_key_".to_string().add(&id.to_string()))
+        //        .expect("Unable to load long term key, did you run get keygen first? ");
+        //    let key: LongTermKey = serde_json::from_str(&data).unwrap();
         let mut M_i_j: [[Scalar<Secp256k1>; N]; n - 1] =
             unsafe { make_array!(n - 1, make_array!(N, Scalar::zero())) };
         let mut K_j_i: [[Scalar<Secp256k1>; N]; n - 1] =
@@ -166,42 +170,70 @@ impl LongTermKey {
             let v_i_r = set_poly(&self.gamma_i[r], &self.eta_i[r]);
             let mut v_i_r_tilde: Vec<_> = (0..N).map(|k| &self.sk_i * &v_i_r[k]).collect();
 
-            let a_r = poly_mod(&a[r], &f_x.coefficients()).1;
-            for j in 0..n - 1 {
-                let M_i_j_r_tilde = poly_mod(&self.u_i_0[r][j].full_eval_N(&0u8), f_x.coefficients()).1;
-                let K_i_j_r_tilde = poly_mod(&self.u_i_1[r][j].full_eval_N(&1u8), f_x.coefficients()).1;
+            let a_r_mul_v_i_r_tilde =
+                poly_mod(&poly_mul_f(&a[r], &v_i_r_tilde[..]), f_x.coefficients()).1;
 
+            let mut a_r_mul_u_i_r = poly_mod(&poly_mul_f(&a[r], &u_i_r[..]), f_x.coefficients()).1;
+            let a_r_mul_u_i_r_len = a_r_mul_u_i_r.len();
+            for _ in 0..N - a_r_mul_u_i_r_len {
+                a_r_mul_u_i_r.push(Scalar::<Secp256k1>::zero());
+            }
+            let a_r_mul_v_i_r = poly_mod(&poly_mul_f(&a[r], &v_i_r[..]), f_x.coefficients()).1;
+
+            d_i = poly_mod(
+                &poly_add_f(&d_i[..], &a_r_mul_v_i_r_tilde[..]),
+                f_x.coefficients(),
+            )
+            .1
+            .try_into()
+            .unwrap();
+
+            x_i = poly_mod(
+                &poly_add_f(&x_i[..], &a_r_mul_u_i_r[..]),
+                f_x.coefficients(),
+            )
+            .1
+            .try_into()
+            .unwrap();
+            y_i = poly_mod(
+                &poly_add_f(&y_i[..], &a_r_mul_v_i_r[..]),
+                f_x.coefficients(),
+            )
+            .1
+            .try_into()
+            .unwrap();
+
+            for j in 0..n - 1 {
+                let M_i_j_r_tilde = &self.u_i_0[r][j].full_eval_N(&0u8);
+                let K_i_j_r_tilde = &self.u_i_1[r][j].full_eval_N(&1u8);
 
                 v_i_r_tilde = poly_add_f(&v_i_r_tilde, &self.v_i_0[r][j].full_eval_N(&0u8));
-                v_i_r_tilde =  poly_mod(&v_i_r_tilde, f_x.coefficients() ).1;
+                v_i_r_tilde = poly_mod(&v_i_r_tilde, f_x.coefficients()).1;
                 v_i_r_tilde = poly_add_f(&v_i_r_tilde, &self.v_i_1[r][j].full_eval_N(&1u8));
-                v_i_r_tilde =  poly_mod(&v_i_r_tilde, f_x.coefficients() ).1;
+                v_i_r_tilde = poly_mod(&v_i_r_tilde, f_x.coefficients()).1;
 
+                let a_r_mul_M_i_j_r_tilde =
+                    poly_mod(&poly_mul_f(&a[r], &M_i_j_r_tilde[..]), f_x.coefficients()).1;
+                let a_r_mul_K_i_j_r_tilde =
+                    poly_mod(&poly_mul_f(&a[r], &K_i_j_r_tilde[..]), f_x.coefficients()).1;
 
-
-                let a_r_mul_M_i_j_r_tilde = poly_mod(&poly_mul_f(&a_r[..], &M_i_j_r_tilde[..]), f_x.coefficients()).1;
-                let a_r_mul_K_i_j_r_tilde = poly_mod(&poly_mul_f(&a_r[..], &K_i_j_r_tilde[..]), f_x.coefficients()).1;
-
-                let a_r_mul_v_i_r_tilde = poly_mod(&poly_mul_f(&a_r[..], &v_i_r_tilde[..]), f_x.coefficients()).1;
-                let a_r_mul_u_i_r = poly_mod(&poly_mul_f(&a_r[..], &u_i_r[..]), f_x.coefficients()).1;
-                let a_r_mul_v_i_r = poly_mod(&poly_mul_f(&a_r[..], &v_i_r[..]), f_x.coefficients()).1;
-
-               // M_i_j[j] =  poly_mod(&poly_add_f(&M_i_j[j], &a_r_mul_M_i_j_r_tilde[..]),f_x.coefficients()).1.try_into().unwrap();
-                let M_i_j_j_vec = poly_mod(&poly_add_f(&M_i_j[j], &a_r_mul_M_i_j_r_tilde[..]),f_x.coefficients()).1;
-                for z in 0..M_i_j_j_vec.len() {
-                    M_i_j[j][z] = M_i_j_j_vec[z].clone();
-                }
-                K_j_i[j] = poly_mod(&poly_add_f(&K_j_i[j], &a_r_mul_K_i_j_r_tilde[..]),f_x.coefficients()).1
-                    .try_into()
-                    .unwrap();
-
-                d_i = poly_mod(&poly_add_f(&d_i[..], &a_r_mul_v_i_r_tilde[..]), f_x.coefficients()).1
-                    .try_into()
-                    .unwrap();
-                x_i = poly_mod(&poly_add_f(&x_i[..], &a_r_mul_u_i_r[..]), f_x.coefficients()).1.try_into().unwrap();
-                y_i = poly_mod(&poly_add_f(&y_i[..], &a_r_mul_v_i_r[..]), f_x.coefficients()).1.try_into().unwrap();
+                M_i_j[j] = poly_mod(
+                    &poly_add_f(&M_i_j[j], &a_r_mul_M_i_j_r_tilde[..]),
+                    f_x.coefficients(),
+                )
+                .1
+                .try_into()
+                .unwrap();
+                K_j_i[j] = poly_mod(
+                    &poly_add_f(&K_j_i[j], &a_r_mul_K_i_j_r_tilde[..]),
+                    f_x.coefficients(),
+                )
+                .1
+                .try_into()
+                .unwrap();
             }
         }
+
         // -K_j_i
         for j in 0..n - 1 {
             for f in 0..N {
@@ -216,21 +248,37 @@ impl LongTermKey {
             for s in 0..c {
                 let u_i_r = set_poly(&self.beta_i[r], &self.w_i[r]);
                 let v_i_s = set_poly(&self.gamma_i[s], &self.eta_i[s]);
-                let mut w_i_r_s = poly_mod(&poly_mul_f(&u_i_r[..], &v_i_s[..]), f_x.coefficients()).1;
+                let mut w_i_r_s =
+                    poly_mod(&poly_mul_f(&u_i_r[..], &v_i_s[..]), f_x.coefficients()).1;
                 for j in 0..n - 1 {
-                    w_i_r_s =
-                        poly_mod(&poly_add_f(&w_i_r_s[..], &self.c_i_0[r * c + s][j].full_eval_2N(&0u8)), f_x.coefficients()).1;
-                    w_i_r_s =
-                        poly_mod(&poly_add_f(&w_i_r_s[..], &self.c_i_1[r * c + s][j].full_eval_2N(&1u8)), f_x.coefficients()).1;
+                    w_i_r_s = poly_mod(
+                        &poly_add_f(&w_i_r_s[..], &self.c_i_0[r * c + s][j].full_eval_2N(&0u8)),
+                        f_x.coefficients(),
+                    )
+                    .1;
+                    w_i_r_s = poly_mod(
+                        &poly_add_f(&w_i_r_s[..], &self.c_i_1[r * c + s][j].full_eval_2N(&1u8)),
+                        f_x.coefficients(),
+                    )
+                    .1;
                 }
-                let  a_r_mul_a_s_mod = poly_mod(&a_mul_a[r*c + s], &f_x.coefficients() ).1;
+                let a_r_mul_a_s_mod = poly_mod(&a_mul_a[r * c + s], &f_x.coefficients()).1;
 
-                let a_r_a_s_mul_w_i_r_s = poly_mod(&poly_mul_f(&a_r_mul_a_s_mod, &w_i_r_s[..]), f_x.coefficients()).1;
-                z_i = poly_mod(&poly_add_f(&z_i[..], &a_r_a_s_mul_w_i_r_s[..]), f_x.coefficients()).1
-                    .try_into()
-                    .unwrap();
+                let a_r_a_s_mul_w_i_r_s = poly_mod(
+                    &poly_mul_f(&a_r_mul_a_s_mod, &w_i_r_s[..]),
+                    f_x.coefficients(),
+                )
+                .1;
+                z_i = poly_mod(
+                    &poly_add_f(&z_i[..], &a_r_a_s_mul_w_i_r_s[..]),
+                    f_x.coefficients(),
+                )
+                .1
+                .try_into()
+                .unwrap();
             }
         }
+
         let tuple = Tuple {
             x_i,
             y_i,
@@ -239,29 +287,61 @@ impl LongTermKey {
             M_i_j,
             K_j_i,
         };
-        let tuple_json = serde_json::to_string(&(tuple, self.alpha_i.clone(), self.sk_i.clone())).unwrap();
+        let tuple_json =
+            serde_json::to_string(&(tuple, self.alpha_i.clone(), self.sk_i.clone())).unwrap();
         fs::write("tuple_".to_string().add(&id.to_string()), tuple_json).expect("Unable to save !");
     }
-
-
-
-
-
 }
 
+// define the Ring we work in, right now the function is deterministic
+// todo: move to cyclotomic rings
+pub fn pick_f_x() -> (Polynomial<Secp256k1>, Vec<Scalar<Secp256k1>>) {
+    let mut roots = Vec::new();
+    let mut a = vec![Scalar::<Secp256k1>::zero(); N + 1];
+    let mut b = vec![Scalar::<Secp256k1>::zero(); N + 1];
+    a[0] = Scalar::from_bigint(&BigInt::one());
+    for i in 0..N {
+        // pick a root
+        let root = Scalar::<Secp256k1>::from_bigint(&BigInt::from(i as u16 + 1));
+        //  let root = Scalar::random();
+        b[0] = Scalar::from(&(Scalar::<Secp256k1>::group_order() - root.to_bigint()));
+        b[1] = Scalar::from_bigint(&BigInt::one());
+        a = poly_mul_f(&a[..], &b[..])[0..N + 1].to_vec();
+        roots.push(root);
+    }
+    return (Polynomial::from_coefficients(a), roots);
+}
 
-// define the Ring we work in
+/*
 pub fn pick_f_x() -> Polynomial<Secp256k1>{
     // todo: move to cyclotomic rings
-    Polynomial::sample_exact((N) as u16)
+    let tmp = Polynomial::sample_exact((N) as u16);
+    println!("poly: {:?}", tmp.clone());
+    println!("poly len: {:?}", tmp.coefficients().len().clone());
+    assert!(false);
+    tmp
+
 }
+ */
 
 fn pick_N_t() -> [BigInt; t] {
-    (0..t)
+    assert!(t < N);
+    let mut candidate_vec: Vec<BigInt>;
+    candidate_vec = (0..t)
         .map(|_| BigInt::sample_below(&BigInt::from(N as u32)))
-        .collect::<Vec<BigInt>>()
-        .try_into()
-        .unwrap()
+        .collect::<Vec<BigInt>>();
+    candidate_vec[t - 1] = BigInt::from(N as u32 - 1); // make sure polynomial is of right degree
+    candidate_vec.sort();
+    candidate_vec.dedup();
+    while candidate_vec.len() < t {
+        candidate_vec = (0..t)
+            .map(|_| BigInt::sample_below(&BigInt::from(N as u32)))
+            .collect::<Vec<BigInt>>();
+        candidate_vec[t - 1] = BigInt::from(N as u32 - 1); // make sure polynomial is of right degree
+        candidate_vec.sort();
+        candidate_vec.dedup();
+    }
+    candidate_vec.try_into().unwrap()
 }
 
 fn pick_Fq_t() -> [Scalar<Secp256k1>; t] {

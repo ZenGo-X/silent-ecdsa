@@ -6,8 +6,8 @@ use crate::{LAMBDA, LAMBDA_BYTES_LEN, N};
 use curv::arithmetic::{Converter, Modulo, One, Samplable, Zero};
 use curv::elliptic::curves::{Scalar, Secp256k1};
 use curv::BigInt;
-use std::convert::TryInto;
 use serde::{Deserialize, Serialize};
+use std::convert::TryInto;
 
 #[derive(Clone, Debug)]
 pub struct PrngOut {
@@ -17,7 +17,7 @@ pub struct PrngOut {
     pub t_i_R: u8,
 }
 
-#[derive(Clone, Debug, Copy,  Serialize, Deserialize)]
+#[derive(Clone, Debug, Copy, Serialize, Deserialize)]
 pub struct CWi {
     pub s_CW: [u8; LAMBDA_BYTES_LEN],
     pub t_CW_L: u8,
@@ -34,7 +34,7 @@ impl CWi {
     }
 }
 
-#[derive(Debug, Clone,  Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CWnp1(Scalar<Secp256k1>);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

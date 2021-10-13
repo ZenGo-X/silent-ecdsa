@@ -18,11 +18,7 @@ pub fn poly_mod(
         let mut a_trim = a.clone().to_vec();
         a_trim = trim(&a_trim);
 
-
-        return (
-            [Scalar::<Secp256k1>::zero()].to_vec(),
-            a_trim,
-        );
+        return ([Scalar::<Secp256k1>::zero()].to_vec(), a_trim);
     }
     let lc_inv = b_poly.coefficients()[b_poly.degree() as usize]
         .clone()
@@ -53,38 +49,35 @@ pub fn poly_mod(
 //    poly[0..Polynomial::from_coefficients(poly.clone()).degree() as usize].to_vec()
 //}
 
-fn trim(poly : &Vec<Scalar<Secp256k1>>) -> Vec<Scalar<Secp256k1>>{
+fn trim(poly: &Vec<Scalar<Secp256k1>>) -> Vec<Scalar<Secp256k1>> {
     let poly_len = poly.len();
     let mut counter = 0;
     for j in 0..poly_len {
         if poly[poly_len - 1 - j] == Scalar::zero() {
-             counter += 1;
-        }
-        else {
+            counter += 1;
+        } else {
             break;
         }
     }
-    return poly[0..poly_len-counter].to_vec()
+    return poly[0..poly_len - counter].to_vec();
 }
-
 
 // largest coefficient
 fn lc(poly: &Polynomial<Secp256k1>) -> Scalar<Secp256k1> {
     poly.coefficients()[poly.degree() as usize].clone()
 }
 
-
 // wrapper around poly_mul
 pub fn poly_mul_f(a: &[Scalar<Secp256k1>], b: &[Scalar<Secp256k1>]) -> Vec<Scalar<Secp256k1>> {
     let mut a_bn: Vec<_> = a.iter().map(|f_a| f_a.to_bigint()).collect();
     let mut b_bn: Vec<_> = b.iter().map(|f_b| f_b.to_bigint()).collect();
-    if a_bn.len() < b_bn.len(){
-        for _ in 0..(b_bn.len() - a_bn.len()){
+    if a_bn.len() < b_bn.len() {
+        for _ in 0..(b_bn.len() - a_bn.len()) {
             a_bn.push(BigInt::zero());
         }
     }
-    if b_bn.len() < a_bn.len(){
-        for _ in 0..(a_bn.len() - b_bn.len()){
+    if b_bn.len() < a_bn.len() {
+        for _ in 0..(a_bn.len() - b_bn.len()) {
             b_bn.push(BigInt::zero());
         }
     }
