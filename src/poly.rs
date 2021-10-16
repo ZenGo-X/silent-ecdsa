@@ -14,10 +14,12 @@ pub fn poly_mod(
     let b_poly = Polynomial::from_coefficients(b.to_vec());
     let b_deg = b_poly.degree();
     assert!(b_poly.degree() > 0);
-    if a_poly.degree() < b_poly.degree() {
-        let mut a_trim = a.clone().to_vec();
-        a_trim = trim(&a_trim);
 
+    let mut a_trim = a.clone().to_vec();
+    a_trim = trim(&a_trim);
+    let a_trim_poly = Polynomial::from_coefficients(a_trim.clone());
+
+    if a_poly.degree() < b_poly.degree() {
         return ([Scalar::<Secp256k1>::zero()].to_vec(), a_trim);
     }
     let lc_inv = b_poly.coefficients()[b_poly.degree() as usize]
@@ -26,7 +28,7 @@ pub fn poly_mod(
         .unwrap();
     let mut coef =
         vec![Scalar::<Secp256k1>::zero(); (a_poly.degree() - b_poly.degree() + 1) as usize];
-    let mut reminder_poly = a_poly.clone();
+    let mut reminder_poly = a_trim_poly.clone();
     let mut reminder_coef = reminder_poly.coefficients().to_vec();
 
     while reminder_poly.degree() >= b_poly.degree() {
@@ -71,6 +73,7 @@ fn lc(poly: &Polynomial<Secp256k1>) -> Scalar<Secp256k1> {
 pub fn poly_mul_f(a: &[Scalar<Secp256k1>], b: &[Scalar<Secp256k1>]) -> Vec<Scalar<Secp256k1>> {
     let mut a_bn: Vec<_> = a.iter().map(|f_a| f_a.to_bigint()).collect();
     let mut b_bn: Vec<_> = b.iter().map(|f_b| f_b.to_bigint()).collect();
+
     if a_bn.len() < b_bn.len() {
         for _ in 0..(b_bn.len() - a_bn.len()) {
             a_bn.push(BigInt::zero());
@@ -81,6 +84,7 @@ pub fn poly_mul_f(a: &[Scalar<Secp256k1>], b: &[Scalar<Secp256k1>]) -> Vec<Scala
             b_bn.push(BigInt::zero());
         }
     }
+
     // todo: propagate errors
     let c = poly_mul(&a_bn[..], &b_bn[..]);
     let c_f: Vec<_> = c
@@ -323,9 +327,35 @@ mod tests {
         println!("duration fft: {:?}", dur_av_fft);
     }
 
+    use std::mem;
+    use std::ptr;
+
     #[test]
     fn test_poly_mod() {
         let a: Vec<_> = (0..63).map(|_| Scalar::<Secp256k1>::random()).collect();
+        let b: Vec<_> = (0..33).map(|_| Scalar::<Secp256k1>::random()).collect();
+        let (mut d, r) = poly_mod(&a, &b);
+        for _ in 0..(b.len() - d.len()) {
+            d.push(Scalar::zero());
+        }
+        let dq = poly_mul_f(&d[..], &b[..]);
+        let dq_poly = Polynomial::from_coefficients(dq);
+        let r_poly = Polynomial::from_coefficients(r);
+        let dq_plus_r = &dq_poly + &r_poly;
+        let mut dq_plus_r_coef = dq_plus_r.coefficients().to_vec();
+        for _ in 0..dq_plus_r_coef.len() - a.len() {
+            dq_plus_r_coef.pop();
+        }
+
+        assert_eq!(dq_plus_r_coef, a);
+    }
+
+    #[test]
+    fn test_poly_mod_edge_case() {
+        // let a: Vec<_> = (0..63).map(|_| Scalar::<Secp256k1>::random()).collect();
+        let mut a: [Scalar<Secp256k1>; 34] =
+            unsafe { make_array!(34, Scalar::<Secp256k1>::zero()) };
+        a[33] = Scalar::<Secp256k1>::random();
 
         let b: Vec<_> = (0..33).map(|_| Scalar::<Secp256k1>::random()).collect();
         let (mut d, r) = poly_mod(&a, &b);

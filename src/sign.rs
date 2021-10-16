@@ -1,5 +1,6 @@
 use crate::keygen::Tuple;
 use crate::n;
+use curv::arithmetic::Integer;
 use curv::cryptographic_primitives::secret_sharing::Polynomial;
 use curv::elliptic::curves::{Point, Scalar, Secp256k1};
 use curv::BigInt;
@@ -21,6 +22,16 @@ pub struct PreSigningKey {
 pub struct PreSignMessage {
     pub x_i_G: Point<Secp256k1>,
     pub M_i_j_G_vec: Vec<Point<Secp256k1>>,
+}
+
+pub struct LocalSignature {
+    s_i_prime: Scalar<Secp256k1>,
+    z_i: Scalar<Secp256k1>,
+}
+
+pub struct Signature {
+    r: Scalar<Secp256k1>,
+    s: Scalar<Secp256k1>,
 }
 
 impl PreSigningKey {
@@ -116,5 +127,61 @@ impl PreSigningKey {
             });
 
         return Ok(R.x_coord().unwrap());
+    }
+}
+
+impl Signature {
+    pub fn local_signature(
+        message: &BigInt,
+        presign_key: &PreSigningKey,
+        r: &BigInt,
+    ) -> LocalSignature {
+        LocalSignature {
+            s_i_prime: &presign_key.y_i * Scalar::from_bigint(message)
+                + Scalar::from_bigint(r) * &presign_key.d_i,
+            z_i: presign_key.z_i.clone(),
+        }
+    }
+
+    pub fn output(local_sigs: &[LocalSignature], r: &BigInt) -> Self {
+        assert_eq!(local_sigs.len(), n);
+
+        let s_prime = local_sigs
+            .iter()
+            .fold(Scalar::<Secp256k1>::zero(), |acc, x| acc + &x.s_i_prime);
+        let z = local_sigs
+            .iter()
+            .fold(Scalar::<Secp256k1>::zero(), |acc, x| acc + &x.z_i);
+        let z_inv = z.invert().unwrap();
+        let s = s_prime * z_inv;
+        Signature {
+            r: Scalar::from_bigint(r),
+            s,
+        }
+    }
+
+    pub fn verify(&self, y: &Point<Secp256k1>, message: &BigInt) -> Result<(), ()> {
+        let b = self.s.invert().unwrap();
+        let a = Scalar::<Secp256k1>::from_bigint(message);
+        let u1 = a * &b;
+        let u2 = &self.r * &b;
+
+        let g = Point::<Secp256k1>::generator();
+        let gu1 = g * u1;
+        let yu2 = y * &u2;
+        // can be faster using shamir trick
+
+        if self.r
+            == Scalar::<Secp256k1>::from_bigint(
+                &(gu1 + yu2)
+                    .x_coord()
+                    .unwrap()
+                    .mod_floor(&Scalar::<Secp256k1>::group_order()),
+            )
+        {
+            Ok(())
+        } else {
+            Err(())
+        }
     }
 }

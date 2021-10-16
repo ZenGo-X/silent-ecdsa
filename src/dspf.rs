@@ -20,27 +20,18 @@ impl DSPF {
         }
         dspf
     }
-    pub fn gen(
-        alpha_vec: &[BigInt],
-        beta_vec: &[Scalar<Secp256k1>],
-        two_n_flag: bool,
-    ) -> (Self, Self) {
+    pub fn gen(alpha_vec: &[BigInt], beta_vec: &[Scalar<Secp256k1>]) -> (Self, Self) {
         // TODO: make sure there are no repetitions in alpha_vec?
-        let t = alpha_vec.len();
-        assert_eq!(t, beta_vec.len());
-
-        let (key0, key1): (Vec<_>, Vec<_>) = (0..t)
+        let alpha_vec_len = alpha_vec.len();
+        assert_eq!(alpha_vec_len, beta_vec.len());
+        let (key0, key1): (Vec<_>, Vec<_>) = (0..alpha_vec_len)
             .map(|i| {
-                if two_n_flag {
-                    assert!(alpha_vec[i] < BigInt::from(2 * N as u32));
-                } else {
-                    assert!(alpha_vec[i] < BigInt::from(N as u32));
-                }
                 assert!(alpha_vec[i] >= BigInt::zero());
+                assert!(alpha_vec[i] < BigInt::from(2) * BigInt::from(N as u16));
                 DPF::gen(&alpha_vec[i], &beta_vec[i])
             })
             .unzip();
-        (DSPF { key: key0 }, DSPF { key: key1 })
+        return (DSPF { key: key0.clone() }, DSPF { key: key1.clone() });
     }
 
     pub fn eval(&self, b: &u8, x: &BigInt, two_n_flag: bool) -> Scalar<Secp256k1> {
@@ -86,11 +77,12 @@ mod tests {
         let mut fe0_vec = Vec::new();
         let mut fe1_vec = Vec::new();
 
-        let (key0, key1) = DSPF::gen(&alpha_vec[..], &beta_vec[..], false);
+        let (key0, key1) = DSPF::gen(&alpha_vec[..], &beta_vec[..]);
         for x in 0..N {
             let x_bn = BigInt::from(x as u32);
             let fe0 = key0.eval(&0u8, &x_bn, false);
             let fe1 = key1.eval(&1u8, &x_bn, false);
+
             fe0_vec.push(fe0.clone());
             fe1_vec.push(fe1.clone());
 
