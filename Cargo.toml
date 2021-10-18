@@ -10,10 +10,10 @@ edition = "2018"
 [dependencies]
 chacha20 = {version = "0.7.2", features = ["rng"]}
 rand_core = "0.6.3"
-curv-kzen = "0.8.2"
+curv-kzen = { git = "https://github.com/ZenGo-X/curv", branch = "ffts" }
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 [dev-dependencies]
 quickcheck = "0.9"
 quickcheck_macros = "0.9"
-serde_json = "1.0"

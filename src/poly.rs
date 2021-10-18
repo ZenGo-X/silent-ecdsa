@@ -1,6 +1,6 @@
 use crate::fft::{bit_rev_radix_2_intt, bit_rev_radix_2_ntt};
 use curv::arithmetic::{Converter, Modulo, Zero};
-use curv::cryptographic_primitives::secret_sharing::Polynomial;
+use curv::cryptographic_primitives::secret_sharing::{ffts::multiply_polynomials, Polynomial};
 use curv::elliptic::curves::{Scalar, Secp256k1};
 use curv::BigInt;
 use std::ops::Add;
@@ -71,27 +71,12 @@ fn lc(poly: &Polynomial<Secp256k1>) -> Scalar<Secp256k1> {
 
 // wrapper around poly_mul
 pub fn poly_mul_f(a: &[Scalar<Secp256k1>], b: &[Scalar<Secp256k1>]) -> Vec<Scalar<Secp256k1>> {
-    let mut a_bn: Vec<_> = a.iter().map(|f_a| f_a.to_bigint()).collect();
-    let mut b_bn: Vec<_> = b.iter().map(|f_b| f_b.to_bigint()).collect();
+    let va = Vec::from(a);
+    let pa = Polynomial::from_coefficients(va);
 
-    if a_bn.len() < b_bn.len() {
-        for _ in 0..(b_bn.len() - a_bn.len()) {
-            a_bn.push(BigInt::zero());
-        }
-    }
-    if b_bn.len() < a_bn.len() {
-        for _ in 0..(a_bn.len() - b_bn.len()) {
-            b_bn.push(BigInt::zero());
-        }
-    }
-
-    // todo: propagate errors
-    let c = poly_mul(&a_bn[..], &b_bn[..]);
-    let c_f: Vec<_> = c
-        .iter()
-        .map(|c_bn| Scalar::<Secp256k1>::from_bigint(c_bn))
-        .collect();
-    c_f
+    let vb = Vec::from(b);
+    let pb = Polynomial::from_coefficients(vb);
+    Vec::from(multiply_polynomials(pa, pb).coefficients())
 }
 
 pub fn poly_add_f(a: &[Scalar<Secp256k1>], b: &[Scalar<Secp256k1>]) -> Vec<Scalar<Secp256k1>> {
