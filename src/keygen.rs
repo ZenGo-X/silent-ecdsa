@@ -310,7 +310,6 @@ pub fn pick_f_x() -> (Polynomial<Secp256k1>, Vec<Scalar<Secp256k1>>) {
     for i in 0..N {
         // pick a root
         let root = Scalar::<Secp256k1>::from_bigint(&BigInt::from(i as u16 + 1));
-        //  let root = Scalar::random();
         b[0] = Scalar::from(&(Scalar::<Secp256k1>::group_order() - root.to_bigint()));
         b[1] = Scalar::from_bigint(&BigInt::one());
         a = poly_mul_f(&a[..], &b[..])[0..N + 1].to_vec();
