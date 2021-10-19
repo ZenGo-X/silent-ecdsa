@@ -1,5 +1,5 @@
 use crate::dspf::DSPF;
-use crate::poly::{poly_add_f, poly_mod, poly_mul_f};
+use crate::poly::{poly_add_f, poly_mod, poly_mul_f, poly_mul_f_naive};
 use crate::{c, n, t, N};
 use curv::arithmetic::{Converter, One, Samplable, Zero};
 use curv::cryptographic_primitives::secret_sharing::Polynomial;
@@ -30,12 +30,12 @@ pub struct LongTermKey {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tuple {
-    pub x_i: [Scalar<Secp256k1>; N],
-    pub y_i: [Scalar<Secp256k1>; N],
-    pub z_i: [Scalar<Secp256k1>; N],
-    pub d_i: [Scalar<Secp256k1>; N],
-    pub M_i_j: [[Scalar<Secp256k1>; N]; n - 1],
-    pub K_j_i: [[Scalar<Secp256k1>; N]; n - 1],
+    pub x_i: Vec<Scalar<Secp256k1>>,
+    pub y_i: Vec<Scalar<Secp256k1>>,
+    pub z_i: Vec<Scalar<Secp256k1>>,
+    pub d_i: Vec<Scalar<Secp256k1>>,
+    pub M_i_j: [Vec<Scalar<Secp256k1>>; n - 1],
+    pub K_j_i: [Vec<Scalar<Secp256k1>>; n - 1],
 }
 
 impl LongTermKey {
@@ -168,10 +168,10 @@ impl LongTermKey {
         f_x: &Polynomial<Secp256k1>,
         id: usize,
     ) {
-        let mut M_i_j: [[Scalar<Secp256k1>; N]; n - 1] =
-            unsafe { make_array!(n - 1, make_array!(N, Scalar::zero())) };
-        let mut K_j_i: [[Scalar<Secp256k1>; N]; n - 1] =
-            unsafe { make_array!(n - 1, make_array!(N, Scalar::zero())) };
+        let mut M_i_j: [Vec<Scalar<Secp256k1>>; n - 1] =
+            unsafe { make_array!(n - 1, make_array!(N, Scalar::zero()).to_vec()) };
+        let mut K_j_i: [Vec<Scalar<Secp256k1>>; n - 1] =
+            unsafe { make_array!(n - 1, make_array!(N, Scalar::zero()).to_vec()) };
         let mut d_i: [Scalar<Secp256k1>; N] = unsafe { make_array!(N, Scalar::zero()) };
         let mut x_i: [Scalar<Secp256k1>; N] = unsafe { make_array!(N, Scalar::zero()) };
         let mut y_i: [Scalar<Secp256k1>; N] = unsafe { make_array!(N, Scalar::zero()) };
@@ -287,10 +287,10 @@ impl LongTermKey {
         }
 
         let tuple = Tuple {
-            x_i,
-            y_i,
-            z_i,
-            d_i,
+            x_i: x_i.to_vec(),
+            y_i: y_i.to_vec(),
+            z_i: z_i.to_vec(),
+            d_i: d_i.to_vec(),
             M_i_j,
             K_j_i,
         };
@@ -313,7 +313,7 @@ pub fn pick_f_x() -> (Polynomial<Secp256k1>, Vec<Scalar<Secp256k1>>) {
         //  let root = Scalar::random();
         b[0] = Scalar::from(&(Scalar::<Secp256k1>::group_order() - root.to_bigint()));
         b[1] = Scalar::from_bigint(&BigInt::one());
-        a = poly_mul_f(&a[..], &b[..])[0..N + 1].to_vec();
+        a = poly_mul_f_naive(&a[..], &b[..])[0..N + 1].to_vec();
         roots.push(root);
     }
     return (Polynomial::from_coefficients(a), roots);

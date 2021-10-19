@@ -15,8 +15,8 @@ mod tests;
 
 const LAMBDA: usize = 128;
 const LAMBDA_BYTES_LEN: usize = LAMBDA / 8;
-const N: usize = 31;
-const t: usize = N / 8; // todo: validate
+const N: usize = 320;
+const t: usize =  4; // todo: validate,
 const c: usize = 2; // todo: validate
 const n: usize = 2; // num of parties
 

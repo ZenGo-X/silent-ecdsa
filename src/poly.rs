@@ -85,6 +85,31 @@ pub fn poly_add_f(a: &[Scalar<Secp256k1>], b: &[Scalar<Secp256k1>]) -> Vec<Scala
     let c_poly = a_poly.add(&b_poly);
     c_poly.coefficients().to_vec()
 }
+
+// wrapper around poly_mul
+pub fn poly_mul_f_naive(a: &[Scalar<Secp256k1>], b: &[Scalar<Secp256k1>]) -> Vec<Scalar<Secp256k1>> {
+    let mut a_bn: Vec<_> = a.iter().map(|f_a| f_a.to_bigint()).collect();
+    let mut b_bn: Vec<_> = b.iter().map(|f_b| f_b.to_bigint()).collect();
+
+    if a_bn.len() < b_bn.len() {
+        for _ in 0..(b_bn.len() - a_bn.len()) {
+            a_bn.push(BigInt::zero());
+        }
+    }
+    if b_bn.len() < a_bn.len() {
+        for _ in 0..(a_bn.len() - b_bn.len()) {
+            b_bn.push(BigInt::zero());
+        }
+    }
+
+    // todo: propagate errors
+    let c = poly_mul(&a_bn[..], &b_bn[..]);
+    let c_f: Vec<_> = c
+        .iter()
+        .map(|c_bn| Scalar::<Secp256k1>::from_bigint(c_bn))
+        .collect();
+    c_f
+}
 // c = a * b
 pub fn poly_mul(a: &[BigInt], b: &[BigInt]) -> Vec<BigInt> {
     assert_eq!(a.len(), b.len());
