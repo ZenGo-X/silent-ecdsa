@@ -1,8 +1,11 @@
 use crate::dspf::DSPF;
 use crate::poly::{poly_add_f, poly_mod, poly_mul_f, poly_mul_f_naive};
 use crate::{c, n, t, N};
-use curv::arithmetic::{Converter, One, Samplable, Zero};
-use curv::cryptographic_primitives::secret_sharing::Polynomial;
+use curv::arithmetic::{Converter, Modulo, One, Samplable, Zero};
+use curv::cryptographic_primitives::secret_sharing::{
+    ffts::{PowerIterator, PRIMITIVE_ROOT_OF_UNITY, ROOT_OF_UNITY_BASIC_ORDER},
+    Polynomial,
+};
 use curv::elliptic::curves::{Point, Scalar, Secp256k1};
 use curv::BigInt;
 use serde::{Deserialize, Serialize};
@@ -306,16 +309,31 @@ pub fn pick_f_x() -> (Polynomial<Secp256k1>, Vec<Scalar<Secp256k1>>) {
     let mut roots = Vec::new();
     let mut a = vec![Scalar::<Secp256k1>::zero(); N + 1];
     let mut b = vec![Scalar::<Secp256k1>::zero(); N + 1];
+    if ROOT_OF_UNITY_BASIC_ORDER % N != 0 {
+        panic!("Order must devide multiplicative group order of Secp256k1");
+    }
     a[0] = Scalar::from_bigint(&BigInt::one());
-    for i in 0..N {
+    PowerIterator::new(
+        Scalar::<Secp256k1>::from_bigint(&BigInt::mod_pow(
+            &BigInt::from_str_radix(PRIMITIVE_ROOT_OF_UNITY, 10).unwrap(),
+            &BigInt::from((ROOT_OF_UNITY_BASIC_ORDER / N) as u64),
+            &Scalar::<Secp256k1>::group_order(),
+        )),
+        N,
+    )
+    .enumerate()
+    .for_each(|(i, root)| {
         // pick a root
-        let root = Scalar::<Secp256k1>::from_bigint(&BigInt::from(i as u16 + 1));
         //  let root = Scalar::random();
+        let mut root = root;
+        if !crate::use_cyclotomic {
+            root = Scalar::<Secp256k1>::random();
+        }
         b[0] = Scalar::from(&(Scalar::<Secp256k1>::group_order() - root.to_bigint()));
         b[1] = Scalar::from_bigint(&BigInt::one());
         a = poly_mul_f_naive(&a[..], &b[..])[0..N + 1].to_vec();
         roots.push(root);
-    }
+    });
     return (Polynomial::from_coefficients(a), roots);
 }
 

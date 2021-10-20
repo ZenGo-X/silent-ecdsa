@@ -3,13 +3,23 @@ use curv::arithmetic::{Converter, Modulo, Zero};
 use curv::cryptographic_primitives::secret_sharing::{ffts::multiply_polynomials, Polynomial};
 use curv::elliptic::curves::{Scalar, Secp256k1};
 use curv::BigInt;
-use std::ops::Add;
+use std::ops::{Add, Neg};
 
 // a mod (b) = (d,r)  such that a = b*d + r
 pub fn poly_mod(
     a: &[Scalar<Secp256k1>],
     b: &[Scalar<Secp256k1>],
 ) -> (Vec<Scalar<Secp256k1>>, Vec<Scalar<Secp256k1>>) {
+    if is_cyclotomic(b) {
+        let mut b_deg = 0;
+        for x in (0..b.len()).rev() {
+            if b[x] != Scalar::<Secp256k1>::zero() {
+                b_deg = x;
+                break;
+            }
+        }
+        return poly_mod_cyclotomic(a, b_deg);
+    }
     let a_poly = Polynomial::from_coefficients(a.to_vec());
     let b_poly = Polynomial::from_coefficients(b.to_vec());
     let b_deg = b_poly.degree();
@@ -47,6 +57,52 @@ pub fn poly_mod(
     return (coef, reminder_coef);
 }
 
+fn is_cyclotomic(a: &[Scalar<Secp256k1>]) -> bool {
+    let one = Scalar::<Secp256k1>::from_bigint(&BigInt::from(1));
+    let minus_one = one.clone().neg();
+    let mut has_seen_one = false;
+    if a[0] != minus_one {
+        return false;
+    }
+    for i in 1..a.len() {
+        if a[i] != Scalar::<Secp256k1>::zero() {
+            if a[i] != one {
+                return false;
+            }
+            if has_seen_one {
+                return false;
+            }
+            has_seen_one = true;
+        }
+    }
+    true
+}
+// computes a mod (x^deg - 1).
+pub fn poly_mod_cyclotomic(
+    a: &[Scalar<Secp256k1>],
+    deg: usize,
+) -> (Vec<Scalar<Secp256k1>>, Vec<Scalar<Secp256k1>>) {
+    if a.len() <= deg {
+        return (vec![Scalar::<Secp256k1>::zero()], a.to_vec());
+    }
+
+    let mut rem = a.to_vec();
+    let mut div_result: Vec<Scalar<Secp256k1>> = Vec::with_capacity(a.len() - deg);
+    (deg..a.len()).rev().for_each(|i| {
+        if a[i].is_zero() {
+            div_result.push(Scalar::<Secp256k1>::zero());
+            return;
+        }
+        rem[i - deg] = &rem[i - deg] + &a[i];
+        // rem[i] = Scalar::<Secp256k1>::zero(); // <-- Redundant
+        div_result.push(a[i].clone());
+    });
+    (
+        div_result.into_iter().rev().collect(),
+        rem.into_iter().take(deg).collect(),
+    )
+}
+
 //fn trim(poly: &Vec<Scalar<Secp256k1>>) -> Vec<Scalar<Secp256k1>>{
 //    poly[0..Polynomial::from_coefficients(poly.clone()).degree() as usize].to_vec()
 //}
@@ -71,6 +127,9 @@ fn lc(poly: &Polynomial<Secp256k1>) -> Scalar<Secp256k1> {
 
 // wrapper around poly_mul
 pub fn poly_mul_f(a: &[Scalar<Secp256k1>], b: &[Scalar<Secp256k1>]) -> Vec<Scalar<Secp256k1>> {
+    if crate::use_fft {
+        return poly_mul_f_naive(a, b);
+    }
     let va = Vec::from(a);
     let pa = Polynomial::from_coefficients(va);
 
@@ -87,7 +146,10 @@ pub fn poly_add_f(a: &[Scalar<Secp256k1>], b: &[Scalar<Secp256k1>]) -> Vec<Scala
 }
 
 // wrapper around poly_mul
-pub fn poly_mul_f_naive(a: &[Scalar<Secp256k1>], b: &[Scalar<Secp256k1>]) -> Vec<Scalar<Secp256k1>> {
+pub fn poly_mul_f_naive(
+    a: &[Scalar<Secp256k1>],
+    b: &[Scalar<Secp256k1>],
+) -> Vec<Scalar<Secp256k1>> {
     let mut a_bn: Vec<_> = a.iter().map(|f_a| f_a.to_bigint()).collect();
     let mut b_bn: Vec<_> = b.iter().map(|f_b| f_b.to_bigint()).collect();
 
@@ -167,7 +229,7 @@ pub fn poly_mul_fft(a: &[BigInt], b: &[BigInt]) -> Vec<BigInt> {
 mod tests {
 
     use crate::fft::{bit_rev_radix_2_intt, bit_rev_radix_2_ntt};
-    use crate::poly::{poly_mod, poly_mul, poly_mul_f, poly_mul_fft};
+    use crate::poly::{poly_mod, poly_mod_cyclotomic, poly_mul, poly_mul_f, poly_mul_fft};
     use curv::arithmetic::{Converter, Modulo, One, Samplable, Zero};
     use curv::cryptographic_primitives::secret_sharing::Polynomial;
     use curv::elliptic::curves::{Scalar, Secp256k1};
@@ -338,6 +400,7 @@ mod tests {
     }
 
     use std::mem;
+    use std::ops::Neg;
     use std::ptr;
 
     #[test]
@@ -345,6 +408,34 @@ mod tests {
         let a: Vec<_> = (0..63).map(|_| Scalar::<Secp256k1>::random()).collect();
         let b: Vec<_> = (0..33).map(|_| Scalar::<Secp256k1>::random()).collect();
         let (mut d, r) = poly_mod(&a, &b);
+        for _ in 0..(b.len() - d.len()) {
+            d.push(Scalar::zero());
+        }
+        let dq = poly_mul_f(&d[..], &b[..]);
+        let dq_poly = Polynomial::from_coefficients(dq);
+        let r_poly = Polynomial::from_coefficients(r);
+        let dq_plus_r = &dq_poly + &r_poly;
+        let mut dq_plus_r_coef = dq_plus_r.coefficients().to_vec();
+        for _ in 0..dq_plus_r_coef.len() - a.len() {
+            dq_plus_r_coef.pop();
+        }
+
+        assert_eq!(dq_plus_r_coef, a);
+    }
+
+    #[test]
+    fn test_poyl_mod_cyclotomic() {
+        let one_scalar = Scalar::<Secp256k1>::from_bigint(&BigInt::from(1));
+        let deg = 320;
+        let a: Vec<_> = (0..(2 * deg - 1))
+            .map(|_| Scalar::<Secp256k1>::random())
+            .collect();
+        let mut b: Vec<_> = (0..(deg + 1))
+            .map(|_| Scalar::<Secp256k1>::zero())
+            .collect();
+        b[0] = one_scalar.clone().neg();
+        b[deg] = one_scalar.clone();
+        let (mut d, r) = poly_mod_cyclotomic(&a, deg);
         for _ in 0..(b.len() - d.len()) {
             d.push(Scalar::zero());
         }
