@@ -89,12 +89,7 @@ pub fn poly_mod_cyclotomic(
     let mut rem = a.to_vec();
     let mut div_result: Vec<Scalar<Secp256k1>> = Vec::with_capacity(a.len() - deg);
     (deg..a.len()).rev().for_each(|i| {
-        if a[i].is_zero() {
-            div_result.push(Scalar::<Secp256k1>::zero());
-            return;
-        }
         rem[i - deg] = &rem[i - deg] + &a[i];
-        // rem[i] = Scalar::<Secp256k1>::zero(); // <-- Redundant
         div_result.push(a[i].clone());
     });
     (
