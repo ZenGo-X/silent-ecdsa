@@ -10,7 +10,7 @@ use curv::elliptic::curves::{Point, Scalar, Secp256k1};
 use curv::BigInt;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
-use std::ops::Add;
+use std::ops::{Add, Neg};
 use std::ptr;
 use std::{fs, mem};
 
@@ -61,9 +61,11 @@ impl LongTermKey {
     }
 
     // todo: compute from seed, should be a random oracle
-    pub fn sample_a() -> [[Scalar<Secp256k1>; N]; c] {
-        let mut a: [[Scalar<Secp256k1>; N]; c] =
-            unsafe { make_array!(c, make_array!(N, Scalar::<Secp256k1>::zero())) };
+    pub fn sample_a() -> Vec<Vec<Scalar<Secp256k1>>> {
+        let mut a  =
+            // unsafe { make_array!(c, make_array!(N, Scalar::<Secp256k1>::zero())) };
+            vec![vec![Scalar::<Secp256k1>::zero(); N]; c];
+
         for i in 0..c {
             a[i] = pick_R();
         }
@@ -167,7 +169,7 @@ impl LongTermKey {
 
     pub fn get_tuple(
         &self,
-        a: [[Scalar<Secp256k1>; N]; c],
+        a: Vec<Vec<Scalar<Secp256k1>>>,
         f_x: &Polynomial<Secp256k1>,
         id: usize,
     ) {
@@ -328,12 +330,17 @@ pub fn pick_f_x() -> (Polynomial<Secp256k1>, Vec<Scalar<Secp256k1>>) {
         let mut root = root;
         if !crate::use_cyclotomic {
             root = Scalar::<Secp256k1>::random();
+            b[0] = Scalar::from(&(Scalar::<Secp256k1>::group_order() - root.to_bigint()));
+            b[1] = Scalar::from_bigint(&BigInt::one());
+            a = poly_mul_f_naive(&a[..], &b[..])[0..N + 1].to_vec();
         }
-        b[0] = Scalar::from(&(Scalar::<Secp256k1>::group_order() - root.to_bigint()));
-        b[1] = Scalar::from_bigint(&BigInt::one());
-        a = poly_mul_f_naive(&a[..], &b[..])[0..N + 1].to_vec();
         roots.push(root);
     });
+    if crate::use_cyclotomic {
+        let one = Scalar::from(1);
+        a[0] = one.clone().neg();
+        a[N] = one;
+    }
     return (Polynomial::from_coefficients(a), roots);
 }
 
@@ -365,7 +372,7 @@ fn pick_Fq_t() -> [Scalar<Secp256k1>; t] {
     //tmp.try_into().unwrap()
 }
 
-fn pick_R() -> [Scalar<Secp256k1>; N] {
+fn pick_R() -> Vec<Scalar<Secp256k1>> {
     (0..N)
         .map(|_| Scalar::<Secp256k1>::random())
         .collect::<Vec<Scalar<Secp256k1>>>()
@@ -405,8 +412,8 @@ fn outer_product_t(u: &[Scalar<Secp256k1>], v: &[Scalar<Secp256k1>]) -> Vec<Scal
 }
 
 fn outer_product_c(
-    u: &[[Scalar<Secp256k1>; N]; c],
-    v: &[[Scalar<Secp256k1>; N]; c],
+    u: &Vec<Vec<Scalar<Secp256k1>>>,
+    v: &Vec<Vec<Scalar<Secp256k1>>>,
 ) -> [[Scalar<Secp256k1>; 2 * N]; c * c] {
     let mut output: [[Scalar<Secp256k1>; 2 * N]; c * c] =
         unsafe { make_array!(c * c, make_array!(2 * N, Scalar::zero())) };
