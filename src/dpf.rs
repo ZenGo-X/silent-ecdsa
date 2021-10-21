@@ -71,7 +71,7 @@ impl DPF {
         let t_1_0: u8 = 1;
         s_0_0[0] = s_0_0[0] & 0xfe;
         s_1_0[0] = s_1_0[0] & 0xfe;
-        let n = BigInt::from(2 * N as u16).bit_length();
+        let n = BigInt::from(2 * N as u32).bit_length();
         let mut s_0_i_minus_1 = s_0_0_vec;
         let mut s_1_i_minus_1 = s_1_0_vec;
         let mut t_0_i_minus_1 = t_0_0;
