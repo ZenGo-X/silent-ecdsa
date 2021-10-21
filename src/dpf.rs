@@ -161,7 +161,7 @@ impl DPF {
         assert!(b <= &1u8);
         let mut s_i_minus_1 = self.0.s_i_0.to_vec();
         let mut t_i_minus_1 = b.clone();
-        for i in 0..BigInt::from(2 * N as u16).bit_length() {
+        for i in 0..BigInt::from(2 * N as u32).bit_length() {
             let stst_i_concat = concat_s_t_values(
                 &self.0.CWs[i].s_CW.to_vec(),
                 &self.0.CWs[i].t_CW_L,
