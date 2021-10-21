@@ -173,14 +173,12 @@ impl LongTermKey {
         f_x: &Polynomial<Secp256k1>,
         id: usize,
     ) {
-        let mut M_i_j: [Vec<Scalar<Secp256k1>>; n - 1] =
-            unsafe { make_array!(n - 1, make_array!(N, Scalar::zero()).to_vec()) };
-        let mut K_j_i: [Vec<Scalar<Secp256k1>>; n - 1] =
-            unsafe { make_array!(n - 1, make_array!(N, Scalar::zero()).to_vec()) };
-        let mut d_i: [Scalar<Secp256k1>; N] = unsafe { make_array!(N, Scalar::zero()) };
-        let mut x_i: [Scalar<Secp256k1>; N] = unsafe { make_array!(N, Scalar::zero()) };
-        let mut y_i: [Scalar<Secp256k1>; N] = unsafe { make_array!(N, Scalar::zero()) };
-        let mut z_i: [Scalar<Secp256k1>; N] = unsafe { make_array!(N, Scalar::zero()) };
+        let mut M_i_j = unsafe { make_array!(n - 1, vec![Scalar::zero(); N]) };
+        let mut K_j_i = unsafe { make_array!(n - 1, vec![Scalar::zero(); N]) };
+        let mut d_i = vec![Scalar::zero(); N];
+        let mut x_i = vec![Scalar::zero(); N];
+        let mut y_i = vec![Scalar::zero(); N];
+        let mut z_i = vec![Scalar::zero(); N];
 
         for r in 0..c {
             let u_i_r = set_poly(&self.beta_i[r], &self.w_i[r]);
@@ -381,7 +379,7 @@ fn pick_R() -> Vec<Scalar<Secp256k1>> {
 }
 
 // set up a ploynomial of degree N from t<N coeffs at locations locs
-fn set_poly(coeffs: &[Scalar<Secp256k1>; t], locs: &[BigInt; t]) -> [Scalar<Secp256k1>; N] {
+fn set_poly(coeffs: &[Scalar<Secp256k1>; t], locs: &[BigInt; t]) -> Vec<Scalar<Secp256k1>> {
     let locs_usize: Vec<_> = (0..locs.len())
         .map(|i| {
             let bytes = locs[i].to_bytes();
@@ -392,7 +390,7 @@ fn set_poly(coeffs: &[Scalar<Secp256k1>; t], locs: &[BigInt; t]) -> [Scalar<Secp
         assert!(locs_usize[i] < N)
     }
     // we assume correctness of input
-    let mut poly_new = unsafe { make_array!(N, Scalar::<Secp256k1>::zero()) };
+    let mut poly_new = unsafe { vec![Scalar::<Secp256k1>::zero(); N] };
     for i in 0..t {
         poly_new[locs_usize[i].clone()] = coeffs[i].clone();
     }
@@ -414,9 +412,9 @@ fn outer_product_t(u: &[Scalar<Secp256k1>], v: &[Scalar<Secp256k1>]) -> Vec<Scal
 fn outer_product_c(
     u: &Vec<Vec<Scalar<Secp256k1>>>,
     v: &Vec<Vec<Scalar<Secp256k1>>>,
-) -> [[Scalar<Secp256k1>; 2 * N]; c * c] {
-    let mut output: [[Scalar<Secp256k1>; 2 * N]; c * c] =
-        unsafe { make_array!(c * c, make_array!(2 * N, Scalar::zero())) };
+) -> [Vec<Scalar<Secp256k1>>; c * c] {
+    let mut output: [Vec<Scalar<Secp256k1>>; c * c] =
+        unsafe { make_array!(c * c, vec![Scalar::zero(); 2 * N]) };
     for i in 0..c {
         for j in 0..c {
             let mul_ij = poly_mul_f(&u[i], &v[j]);
