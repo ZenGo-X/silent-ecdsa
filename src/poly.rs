@@ -122,7 +122,7 @@ fn lc(poly: &Polynomial<Secp256k1>) -> Scalar<Secp256k1> {
 
 // wrapper around poly_mul
 pub fn poly_mul_f(a: &[Scalar<Secp256k1>], b: &[Scalar<Secp256k1>]) -> Vec<Scalar<Secp256k1>> {
-    if crate::use_fft {
+    if !crate::use_fft {
         return poly_mul_f_naive(a, b);
     }
     let va = Vec::from(a);
