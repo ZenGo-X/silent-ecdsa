@@ -354,8 +354,8 @@ mod tests {
 
     #[test]
     fn test_simple_poly_mul() {
-        let a = [1, 2, 3, 4].map(|i| BigInt::from(i));
-        let b = [5, 6, 7, 8].map(|i| BigInt::from(i));
+        let a = [1, 2, 3, 4].map(|i| Scalar::from(i));
+        let b = [5, 6, 7, 8].map(|i| Scalar::from(i));
         let c = poly_mul(&a, &b);
         println!("c: {:?}", c);
     }
@@ -366,25 +366,24 @@ mod tests {
         let mut dur_av_fft = 0;
         let rep = 100 as usize;
         for _ in 0..rep {
-            let a: Vec<_> = (0..32)
-                .map(|_| Scalar::<Secp256k1>::random().to_bigint())
-                .collect();
-            let b: Vec<_> = (0..32)
-                .map(|_| Scalar::<Secp256k1>::random().to_bigint())
-                .collect();
+            let a: Vec<_> = (0..32).map(|_| Scalar::<Secp256k1>::random()).collect();
+            let b: Vec<_> = (0..32).map(|_| Scalar::<Secp256k1>::random()).collect();
 
             let start_simple = Instant::now();
             let mut c_simple = poly_mul(&a[..], &b[..]);
             let duration_simple = start_simple.elapsed();
             dur_av_simple = dur_av_simple + duration_simple.as_millis();
 
+            let a_bn: Vec<_> = a.iter().map(Scalar::to_bigint).collect();
+            let b_bn: Vec<_> = b.iter().map(Scalar::to_bigint).collect();
             let start_fft = Instant::now();
-            let c_fft = poly_mul_fft(&a[..], &b[..]);
+            let c_fft = poly_mul_fft(&a_bn[..], &b_bn[..]);
             let duration_fft = start_fft.elapsed();
             dur_av_fft = dur_av_fft + duration_fft.as_millis();
 
-            c_simple.push(BigInt::zero());
-            assert_eq!(c_simple, c_fft);
+            c_simple.push(Scalar::zero());
+            let c_fft_scalar: Vec<_> = c_fft.iter().map(Scalar::from_bigint).collect();
+            assert_eq!(c_simple, c_fft_scalar);
         }
         println!("duration simple: {:?}", dur_av_simple);
         println!("duration fft: {:?}", dur_av_fft);
