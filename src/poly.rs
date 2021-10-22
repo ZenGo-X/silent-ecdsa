@@ -145,42 +145,38 @@ pub fn poly_mul_f_naive(
     a: &[Scalar<Secp256k1>],
     b: &[Scalar<Secp256k1>],
 ) -> Vec<Scalar<Secp256k1>> {
-    let mut a_bn: Vec<_> = a.iter().map(|f_a| f_a.to_bigint()).collect();
-    let mut b_bn: Vec<_> = b.iter().map(|f_b| f_b.to_bigint()).collect();
+    let mut a_bn: Vec<_> = a.to_vec();
+    let mut b_bn: Vec<_> = b.to_vec();
 
     if a_bn.len() < b_bn.len() {
         for _ in 0..(b_bn.len() - a_bn.len()) {
-            a_bn.push(BigInt::zero());
+            a_bn.push(Scalar::zero());
         }
     }
     if b_bn.len() < a_bn.len() {
         for _ in 0..(a_bn.len() - b_bn.len()) {
-            b_bn.push(BigInt::zero());
+            b_bn.push(Scalar::zero());
         }
     }
 
     // todo: propagate errors
     let c = poly_mul(&a_bn[..], &b_bn[..]);
-    let c_f: Vec<_> = c
-        .iter()
-        .map(|c_bn| Scalar::<Secp256k1>::from_bigint(c_bn))
-        .collect();
-    c_f
+    c
 }
 // c = a * b
-pub fn poly_mul(a: &[BigInt], b: &[BigInt]) -> Vec<BigInt> {
+pub fn poly_mul(a: &[Scalar<Secp256k1>], b: &[Scalar<Secp256k1>]) -> Vec<Scalar<Secp256k1>> {
     assert_eq!(a.len(), b.len());
     let n = a.len();
     let c: Vec<_> = (0..2 * n - 1)
         .map(|i| {
-            let mut acc = BigInt::zero();
+            let mut acc = Scalar::zero();
             let mut tmp;
             for j in 0..=i {
-                tmp = BigInt::zero();
+                tmp = Scalar::zero();
                 if j < n && i - j < n {
-                    tmp = BigInt::mod_mul(&a[j], &b[i - j], &Scalar::<Secp256k1>::group_order());
+                    tmp = &a[j] * &b[i - j];
                 }
-                acc = BigInt::mod_add(&acc, &tmp, &Scalar::<Secp256k1>::group_order());
+                acc = &acc + &tmp;
             }
             acc
         })
