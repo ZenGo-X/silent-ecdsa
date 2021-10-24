@@ -20,7 +20,8 @@ fn test_presign() {
     // note: we assume keygen run already, otherwise an error.
     let mut presign_keys: Vec<PreSigningKey> = Vec::new();
     let mut presign_messages: Vec<PreSignMessage> = Vec::new();
-    let sample_at_point = Scalar::from_bigint(&BigInt::from(4)); // our ring has zeros in 1,2,3,4,...N
+    let (_, roots) = pick_f_x();
+    let sample_at_point = roots[2].clone();
     for id in 0..n {
         let presign_key_id = PreSigningKey::get_key_from_tuple(&sample_at_point, id);
         presign_messages.push(presign_key_id.presign_message());
@@ -52,7 +53,8 @@ fn test_presign_and_sign() {
     // note: we assume keygen run already, otherwise an error.
     let mut presign_keys: Vec<PreSigningKey> = Vec::new();
     let mut presign_messages: Vec<PreSignMessage> = Vec::new();
-    let sample_at_point = Scalar::from_bigint(&BigInt::from(4)); // our ring has zeros in 1,2,3,4,...N
+    let (_, roots) = pick_f_x();
+    let sample_at_point = roots[2].clone();
     for id in 0..n {
         let presign_key_id = PreSigningKey::get_key_from_tuple(&sample_at_point, id);
         presign_messages.push(presign_key_id.presign_message());

@@ -66,7 +66,7 @@ impl LongTermKey {
             // unsafe { make_array!(c, make_array!(N, Scalar::<Secp256k1>::zero())) };
             vec![vec![Scalar::<Secp256k1>::zero(); N]; c];
 
-        for i in 0..c {
+        for i in 0..c-1 {
             a[i] = pick_R();
         }
         a[c - 1][0] = Scalar::from_bigint(&BigInt::one());

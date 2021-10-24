@@ -18,9 +18,9 @@ const LAMBDA_BYTES_LEN: usize = LAMBDA / 8;
 //Possible factors:
 //  2 - up to power of 5.
 //  3, 149, 631
-const N: usize = 32 * 3;
-const t: usize = 4; // todo: validate,
-const c: usize = 2; // todo: validate
+const N: usize = 64;
+const t: usize = 2; // todo: validate,
+const c: usize = 1; // todo: validate
 const n: usize = 2; // num of parties
 pub const use_cyclotomic: bool = true;
 pub const use_fft: bool = true;
