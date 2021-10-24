@@ -130,7 +130,11 @@ pub fn poly_mul_f(a: &[Scalar<Secp256k1>], b: &[Scalar<Secp256k1>]) -> Vec<Scala
 
     let vb = Vec::from(b);
     let pb = Polynomial::from_coefficients(vb);
-    Vec::from(multiply_polynomials(pa, pb).coefficients())
+    multiply_polynomials(pa, pb)
+        .into_coefficients()
+        .into_iter()
+        .take(a.len() + b.len() - 1)
+        .collect()
 }
 
 pub fn poly_add_f(a: &[Scalar<Secp256k1>], b: &[Scalar<Secp256k1>]) -> Vec<Scalar<Secp256k1>> {
