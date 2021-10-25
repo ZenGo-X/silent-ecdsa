@@ -66,7 +66,7 @@ impl LongTermKey {
             // unsafe { make_array!(c, make_array!(N, Scalar::<Secp256k1>::zero())) };
             vec![vec![Scalar::<Secp256k1>::zero(); N]; c];
 
-        for i in 0..c-1 {
+        for i in 0..c - 1 {
             a[i] = pick_R();
         }
         a[c - 1][0] = Scalar::from_bigint(&BigInt::one());
@@ -78,6 +78,7 @@ impl LongTermKey {
         for i in 0..n {
             long_term_keys[i].alpha_i = Scalar::<Secp256k1>::random();
             long_term_keys[i].sk_i = Scalar::<Secp256k1>::random();
+            //  long_term_keys[i].sk_i = Scalar::<Secp256k1>::from_bigint(&BigInt::one());
         }
         let pk = long_term_keys
             .iter()
@@ -322,7 +323,7 @@ pub fn pick_f_x() -> (Polynomial<Secp256k1>, Vec<Scalar<Secp256k1>>) {
         N,
     )
     .enumerate()
-    .for_each(|(i, root)| {
+    .for_each(|(_i, root)| {
         // pick a root
         //  let root = Scalar::random();
         let mut root = root;
@@ -382,15 +383,21 @@ fn pick_R() -> Vec<Scalar<Secp256k1>> {
 fn set_poly(coeffs: &[Scalar<Secp256k1>; t], locs: &[BigInt; t]) -> Vec<Scalar<Secp256k1>> {
     let locs_usize: Vec<_> = (0..locs.len())
         .map(|i| {
-            let bytes = locs[i].to_bytes();
-            usize::from(bytes[0])
+            let mut bytes_arr = [0u8; 4];
+            let mut bytes = locs[i].to_bytes();
+            bytes.reverse();
+
+            for j in 0..bytes.len() {
+                bytes_arr[j] = bytes[j].clone();
+            }
+            u32::from_le_bytes(bytes_arr) as usize
         })
         .collect();
     for i in 0..locs_usize.len() {
         assert!(locs_usize[i] < N)
     }
     // we assume correctness of input
-    let mut poly_new = unsafe { vec![Scalar::<Secp256k1>::zero(); N] };
+    let mut poly_new =  vec![Scalar::<Secp256k1>::zero(); N] ;
     for i in 0..t {
         poly_new[locs_usize[i].clone()] = coeffs[i].clone();
     }

@@ -52,7 +52,7 @@ impl DPF {
         let key = Key {
             s_i_0: [0; LAMBDA_BYTES_LEN],
             CW_n_plus_1: CWnp1(Scalar::zero()),
-            CWs: vec![CWi::init(); u16::BITS as usize],
+            CWs: vec![CWi::init(); u32::BITS as usize],
         };
         DPF(key)
     }

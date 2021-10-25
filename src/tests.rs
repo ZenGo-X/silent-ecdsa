@@ -1,7 +1,6 @@
 use crate::keygen::{pick_f_x, LongTermKey};
 use crate::n;
 use crate::sign::{PreSignMessage, PreSigningKey, Signature};
-use curv::elliptic::curves::Scalar;
 use curv::BigInt;
 use std::fs;
 use std::ops::Add;
@@ -21,21 +20,23 @@ fn test_presign() {
     let mut presign_keys: Vec<PreSigningKey> = Vec::new();
     let mut presign_messages: Vec<PreSignMessage> = Vec::new();
     let (_, roots) = pick_f_x();
-    let sample_at_point = roots[2].clone();
+    let sample_at_point = roots[3].clone();
     for id in 0..n {
         let presign_key_id = PreSigningKey::get_key_from_tuple(&sample_at_point, id);
         presign_messages.push(presign_key_id.presign_message());
         presign_keys.push(presign_key_id);
     }
-    // for two parties
     /*
+    // for two parties
+
     let x = presign_keys[0].x_i.clone() + presign_keys[1].x_i.clone();
     let y = presign_keys[0].y_i.clone() + presign_keys[1].y_i.clone();
     let z = presign_keys[0].z_i.clone() + presign_keys[1].z_i.clone();
     let d = presign_keys[0].d_i.clone() + presign_keys[1].d_i.clone();
     let sk = presign_keys[0].sk_i.clone() + presign_keys[1].sk_i.clone();
-    //assert_eq!(sk * &y , d);
-    //assert_eq!(x * &y , z);
+
+    assert_eq!(sk * &y, d);
+    assert_eq!(x * &y, z);
 
      */
 
