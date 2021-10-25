@@ -27,7 +27,7 @@ impl DSPF {
         let (key0, key1): (Vec<_>, Vec<_>) = (0..alpha_vec_len)
             .map(|i| {
                 assert!(alpha_vec[i] >= BigInt::zero());
-                assert!(alpha_vec[i] < BigInt::from(2) * BigInt::from(N as u16));
+                assert!(alpha_vec[i] < BigInt::from(2) * BigInt::from(N as u32));
                 DPF::gen(&alpha_vec[i], &beta_vec[i])
             })
             .unzip();

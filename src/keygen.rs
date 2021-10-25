@@ -1,13 +1,16 @@
 use crate::dspf::DSPF;
-use crate::poly::{poly_add_f, poly_mod, poly_mul_f};
+use crate::poly::{poly_add_f, poly_mod, poly_mul_f, poly_mul_f_naive};
 use crate::{c, n, t, N};
-use curv::arithmetic::{Converter, One, Samplable, Zero};
-use curv::cryptographic_primitives::secret_sharing::Polynomial;
+use curv::arithmetic::{Converter, Modulo, One, Samplable, Zero};
+use curv::cryptographic_primitives::secret_sharing::{
+    ffts::{PowerIterator, PRIMITIVE_ROOT_OF_UNITY, ROOT_OF_UNITY_BASIC_ORDER},
+    Polynomial,
+};
 use curv::elliptic::curves::{Point, Scalar, Secp256k1};
 use curv::BigInt;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
-use std::ops::Add;
+use std::ops::{Add, Neg};
 use std::ptr;
 use std::{fs, mem};
 
@@ -30,12 +33,12 @@ pub struct LongTermKey {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tuple {
-    pub x_i: [Scalar<Secp256k1>; N],
-    pub y_i: [Scalar<Secp256k1>; N],
-    pub z_i: [Scalar<Secp256k1>; N],
-    pub d_i: [Scalar<Secp256k1>; N],
-    pub M_i_j: [[Scalar<Secp256k1>; N]; n - 1],
-    pub K_j_i: [[Scalar<Secp256k1>; N]; n - 1],
+    pub x_i: Vec<Scalar<Secp256k1>>,
+    pub y_i: Vec<Scalar<Secp256k1>>,
+    pub z_i: Vec<Scalar<Secp256k1>>,
+    pub d_i: Vec<Scalar<Secp256k1>>,
+    pub M_i_j: [Vec<Scalar<Secp256k1>>; n - 1],
+    pub K_j_i: [Vec<Scalar<Secp256k1>>; n - 1],
 }
 
 impl LongTermKey {
@@ -58,10 +61,12 @@ impl LongTermKey {
     }
 
     // todo: compute from seed, should be a random oracle
-    pub fn sample_a() -> [[Scalar<Secp256k1>; N]; c] {
-        let mut a: [[Scalar<Secp256k1>; N]; c] =
-            unsafe { make_array!(c, make_array!(N, Scalar::<Secp256k1>::zero())) };
-        for i in 0..c {
+    pub fn sample_a() -> Vec<Vec<Scalar<Secp256k1>>> {
+        let mut a  =
+            // unsafe { make_array!(c, make_array!(N, Scalar::<Secp256k1>::zero())) };
+            vec![vec![Scalar::<Secp256k1>::zero(); N]; c];
+
+        for i in 0..c - 1 {
             a[i] = pick_R();
         }
         a[c - 1][0] = Scalar::from_bigint(&BigInt::one());
@@ -73,6 +78,7 @@ impl LongTermKey {
         for i in 0..n {
             long_term_keys[i].alpha_i = Scalar::<Secp256k1>::random();
             long_term_keys[i].sk_i = Scalar::<Secp256k1>::random();
+            //  long_term_keys[i].sk_i = Scalar::<Secp256k1>::from_bigint(&BigInt::one());
         }
         let pk = long_term_keys
             .iter()
@@ -164,18 +170,16 @@ impl LongTermKey {
 
     pub fn get_tuple(
         &self,
-        a: [[Scalar<Secp256k1>; N]; c],
+        a: Vec<Vec<Scalar<Secp256k1>>>,
         f_x: &Polynomial<Secp256k1>,
         id: usize,
     ) {
-        let mut M_i_j: [[Scalar<Secp256k1>; N]; n - 1] =
-            unsafe { make_array!(n - 1, make_array!(N, Scalar::zero())) };
-        let mut K_j_i: [[Scalar<Secp256k1>; N]; n - 1] =
-            unsafe { make_array!(n - 1, make_array!(N, Scalar::zero())) };
-        let mut d_i: [Scalar<Secp256k1>; N] = unsafe { make_array!(N, Scalar::zero()) };
-        let mut x_i: [Scalar<Secp256k1>; N] = unsafe { make_array!(N, Scalar::zero()) };
-        let mut y_i: [Scalar<Secp256k1>; N] = unsafe { make_array!(N, Scalar::zero()) };
-        let mut z_i: [Scalar<Secp256k1>; N] = unsafe { make_array!(N, Scalar::zero()) };
+        let mut M_i_j = unsafe { make_array!(n - 1, vec![Scalar::zero(); N]) };
+        let mut K_j_i = unsafe { make_array!(n - 1, vec![Scalar::zero(); N]) };
+        let mut d_i = vec![Scalar::zero(); N];
+        let mut x_i = vec![Scalar::zero(); N];
+        let mut y_i = vec![Scalar::zero(); N];
+        let mut z_i = vec![Scalar::zero(); N];
 
         for r in 0..c {
             let u_i_r = set_poly(&self.beta_i[r], &self.w_i[r]);
@@ -287,10 +291,10 @@ impl LongTermKey {
         }
 
         let tuple = Tuple {
-            x_i,
-            y_i,
-            z_i,
-            d_i,
+            x_i: x_i.to_vec(),
+            y_i: y_i.to_vec(),
+            z_i: z_i.to_vec(),
+            d_i: d_i.to_vec(),
             M_i_j,
             K_j_i,
         };
@@ -306,14 +310,35 @@ pub fn pick_f_x() -> (Polynomial<Secp256k1>, Vec<Scalar<Secp256k1>>) {
     let mut roots = Vec::new();
     let mut a = vec![Scalar::<Secp256k1>::zero(); N + 1];
     let mut b = vec![Scalar::<Secp256k1>::zero(); N + 1];
+    if ROOT_OF_UNITY_BASIC_ORDER % N != 0 {
+        panic!("Order must devide multiplicative group order of Secp256k1");
+    }
     a[0] = Scalar::from_bigint(&BigInt::one());
-    for i in 0..N {
+    PowerIterator::new(
+        Scalar::<Secp256k1>::from_bigint(&BigInt::mod_pow(
+            &BigInt::from_str_radix(PRIMITIVE_ROOT_OF_UNITY, 10).unwrap(),
+            &BigInt::from((ROOT_OF_UNITY_BASIC_ORDER / N) as u64),
+            &Scalar::<Secp256k1>::group_order(),
+        )),
+        N,
+    )
+    .enumerate()
+    .for_each(|(_i, root)| {
         // pick a root
-        let root = Scalar::<Secp256k1>::from_bigint(&BigInt::from(i as u16 + 1));
-        b[0] = Scalar::from(&(Scalar::<Secp256k1>::group_order() - root.to_bigint()));
-        b[1] = Scalar::from_bigint(&BigInt::one());
-        a = poly_mul_f(&a[..], &b[..])[0..N + 1].to_vec();
+
+        let mut root = root;
+        if !crate::use_cyclotomic {
+            root = Scalar::<Secp256k1>::random();
+            b[0] = Scalar::from(&(Scalar::<Secp256k1>::group_order() - root.to_bigint()));
+            b[1] = Scalar::from_bigint(&BigInt::one());
+            a = poly_mul_f_naive(&a[..], &b[..])[0..N + 1].to_vec();
+        }
         roots.push(root);
+    });
+    if crate::use_cyclotomic {
+        let one = Scalar::from(1);
+        a[0] = one.clone().neg();
+        a[N] = one;
     }
     return (Polynomial::from_coefficients(a), roots);
 }
@@ -346,7 +371,7 @@ fn pick_Fq_t() -> [Scalar<Secp256k1>; t] {
     //tmp.try_into().unwrap()
 }
 
-fn pick_R() -> [Scalar<Secp256k1>; N] {
+fn pick_R() -> Vec<Scalar<Secp256k1>> {
     (0..N)
         .map(|_| Scalar::<Secp256k1>::random())
         .collect::<Vec<Scalar<Secp256k1>>>()
@@ -355,18 +380,24 @@ fn pick_R() -> [Scalar<Secp256k1>; N] {
 }
 
 // set up a ploynomial of degree N from t<N coeffs at locations locs
-fn set_poly(coeffs: &[Scalar<Secp256k1>; t], locs: &[BigInt; t]) -> [Scalar<Secp256k1>; N] {
+fn set_poly(coeffs: &[Scalar<Secp256k1>; t], locs: &[BigInt; t]) -> Vec<Scalar<Secp256k1>> {
     let locs_usize: Vec<_> = (0..locs.len())
         .map(|i| {
-            let bytes = locs[i].to_bytes();
-            usize::from(bytes[0])
+            let mut bytes_arr = [0u8; 4];
+            let mut bytes = locs[i].to_bytes();
+            bytes.reverse();
+
+            for j in 0..bytes.len() {
+                bytes_arr[j] = bytes[j].clone();
+            }
+            u32::from_le_bytes(bytes_arr) as usize
         })
         .collect();
     for i in 0..locs_usize.len() {
         assert!(locs_usize[i] < N)
     }
     // we assume correctness of input
-    let mut poly_new = unsafe { make_array!(N, Scalar::<Secp256k1>::zero()) };
+    let mut poly_new =  vec![Scalar::<Secp256k1>::zero(); N] ;
     for i in 0..t {
         poly_new[locs_usize[i].clone()] = coeffs[i].clone();
     }
@@ -386,11 +417,11 @@ fn outer_product_t(u: &[Scalar<Secp256k1>], v: &[Scalar<Secp256k1>]) -> Vec<Scal
 }
 
 fn outer_product_c(
-    u: &[[Scalar<Secp256k1>; N]; c],
-    v: &[[Scalar<Secp256k1>; N]; c],
-) -> [[Scalar<Secp256k1>; 2 * N]; c * c] {
-    let mut output: [[Scalar<Secp256k1>; 2 * N]; c * c] =
-        unsafe { make_array!(c * c, make_array!(2 * N, Scalar::zero())) };
+    u: &Vec<Vec<Scalar<Secp256k1>>>,
+    v: &Vec<Vec<Scalar<Secp256k1>>>,
+) -> [Vec<Scalar<Secp256k1>>; c * c] {
+    let mut output: [Vec<Scalar<Secp256k1>>; c * c] =
+        unsafe { make_array!(c * c, vec![Scalar::zero(); 2 * N]) };
     for i in 0..c {
         for j in 0..c {
             let mul_ij = poly_mul_f(&u[i], &v[j]);

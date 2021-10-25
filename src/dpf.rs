@@ -52,7 +52,7 @@ impl DPF {
         let key = Key {
             s_i_0: [0; LAMBDA_BYTES_LEN],
             CW_n_plus_1: CWnp1(Scalar::zero()),
-            CWs: vec![CWi::init(); u16::BITS as usize],
+            CWs: vec![CWi::init(); u32::BITS as usize],
         };
         DPF(key)
     }
@@ -71,7 +71,7 @@ impl DPF {
         let t_1_0: u8 = 1;
         s_0_0[0] = s_0_0[0] & 0xfe;
         s_1_0[0] = s_1_0[0] & 0xfe;
-        let n = BigInt::from(2 * N as u16).bit_length();
+        let n = BigInt::from(2 * N as u32).bit_length();
         let mut s_0_i_minus_1 = s_0_0_vec;
         let mut s_1_i_minus_1 = s_1_0_vec;
         let mut t_0_i_minus_1 = t_0_0;
@@ -161,7 +161,7 @@ impl DPF {
         assert!(b <= &1u8);
         let mut s_i_minus_1 = self.0.s_i_0.to_vec();
         let mut t_i_minus_1 = b.clone();
-        for i in 0..BigInt::from(2 * N as u16).bit_length() {
+        for i in 0..BigInt::from(2 * N as u32).bit_length() {
             let stst_i_concat = concat_s_t_values(
                 &self.0.CWs[i].s_CW.to_vec(),
                 &self.0.CWs[i].t_CW_L,
