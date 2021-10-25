@@ -325,7 +325,7 @@ pub fn pick_f_x() -> (Polynomial<Secp256k1>, Vec<Scalar<Secp256k1>>) {
     .enumerate()
     .for_each(|(_i, root)| {
         // pick a root
-        //  let root = Scalar::random();
+
         let mut root = root;
         if !crate::use_cyclotomic {
             root = Scalar::<Secp256k1>::random();
