@@ -63,7 +63,6 @@ impl LongTermKey {
     // todo: compute from seed, should be a random oracle
     pub fn sample_a() -> Vec<Vec<Scalar<Secp256k1>>> {
         let mut a  =
-            // unsafe { make_array!(c, make_array!(N, Scalar::<Secp256k1>::zero())) };
             vec![vec![Scalar::<Secp256k1>::zero(); N]; c];
 
         for i in 0..c - 1 {
@@ -367,8 +366,6 @@ fn pick_Fq_t() -> [Scalar<Secp256k1>; t] {
         .collect::<Vec<Scalar<Secp256k1>>>()
         .try_into()
         .unwrap()
-    //tmp[t-1] = Scalar::<Secp256k1>::zero();
-    //tmp.try_into().unwrap()
 }
 
 fn pick_R() -> Vec<Scalar<Secp256k1>> {
