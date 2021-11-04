@@ -1,5 +1,6 @@
 use crate::dspf::DSPF;
 use crate::poly::{poly_add_f, poly_mod, poly_mul_f, poly_mul_f_naive};
+use crate::utils::array_from_fn;
 use crate::{c, n, t, N};
 use curv::arithmetic::{Converter, Modulo, One, Samplable, Zero};
 use curv::cryptographic_primitives::secret_sharing::{
@@ -46,24 +47,23 @@ impl LongTermKey {
         LongTermKey {
             alpha_i: Scalar::zero(),
             sk_i: Scalar::zero(),
-            w_i: unsafe { make_array!(c, make_array!(t, BigInt::zero())) },
-            eta_i: unsafe { make_array!(c, make_array!(t, BigInt::zero())) },
-            beta_i: unsafe { make_array!(c, make_array!(t, Scalar::zero())) },
-            gamma_i: unsafe { make_array!(c, make_array!(t, Scalar::zero())) },
-            u_i_0: unsafe { make_array!(c, make_array!((n - 1), DSPF::init(t * (n - 1)))) },
-            u_i_1: unsafe { make_array!(c, make_array!((n - 1), DSPF::init(t * (n - 1)))) },
-            v_i_0: unsafe { make_array!(c, make_array!((n - 1), DSPF::init(t * (n - 1)))) },
-            v_i_1: unsafe { make_array!(c, make_array!((n - 1), DSPF::init(t * (n - 1)))) },
-            c_i_0: unsafe { make_array!(c * c, make_array!((n - 1), DSPF::init(t * t * (n - 1)))) },
-            c_i_1: unsafe { make_array!(c * c, make_array!((n - 1), DSPF::init(t * t * (n - 1)))) },
+            w_i: array_from_fn(|_| array_from_fn(|_| BigInt::zero())),
+            eta_i: array_from_fn(|_| array_from_fn(|_| BigInt::zero())),
+            beta_i: array_from_fn(|_| array_from_fn(|_| Scalar::zero())),
+            gamma_i: array_from_fn(|_| array_from_fn(|_| Scalar::zero())),
+            u_i_0: array_from_fn(|_| array_from_fn(|_| DSPF::init(t * (n - 1)))),
+            u_i_1: array_from_fn(|_| array_from_fn(|_| DSPF::init(t * (n - 1)))),
+            v_i_0: array_from_fn(|_| array_from_fn(|_| DSPF::init(t * (n - 1)))),
+            v_i_1: array_from_fn(|_| array_from_fn(|_| DSPF::init(t * (n - 1)))),
+            c_i_0: array_from_fn(|_| array_from_fn(|_| DSPF::init(t * t * (n - 1)))),
+            c_i_1: array_from_fn(|_| array_from_fn(|_| DSPF::init(t * t * (n - 1)))),
             pk: Point::<Secp256k1>::zero(),
         }
     }
 
     // todo: compute from seed, should be a random oracle
     pub fn sample_a() -> Vec<Vec<Scalar<Secp256k1>>> {
-        let mut a  =
-            vec![vec![Scalar::<Secp256k1>::zero(); N]; c];
+        let mut a = vec![vec![Scalar::<Secp256k1>::zero(); N]; c];
 
         for i in 0..c - 1 {
             a[i] = pick_R();
@@ -73,7 +73,7 @@ impl LongTermKey {
     }
 
     pub fn trusted_key_gen() -> [Self; n] {
-        let mut long_term_keys = unsafe { make_array!(n, LongTermKey::init()) };
+        let mut long_term_keys = array_from_fn(|_| LongTermKey::init());
         for i in 0..n {
             long_term_keys[i].alpha_i = Scalar::<Secp256k1>::random();
             long_term_keys[i].sk_i = Scalar::<Secp256k1>::random();
@@ -173,8 +173,8 @@ impl LongTermKey {
         f_x: &Polynomial<Secp256k1>,
         id: usize,
     ) {
-        let mut M_i_j = unsafe { make_array!(n - 1, vec![Scalar::zero(); N]) };
-        let mut K_j_i = unsafe { make_array!(n - 1, vec![Scalar::zero(); N]) };
+        let mut M_i_j = array_from_fn(|_| vec![Scalar::zero(); N]);
+        let mut K_j_i = array_from_fn(|_| vec![Scalar::zero(); N]);
         let mut d_i = vec![Scalar::zero(); N];
         let mut x_i = vec![Scalar::zero(); N];
         let mut y_i = vec![Scalar::zero(); N];
@@ -394,7 +394,7 @@ fn set_poly(coeffs: &[Scalar<Secp256k1>; t], locs: &[BigInt; t]) -> Vec<Scalar<S
         assert!(locs_usize[i] < N)
     }
     // we assume correctness of input
-    let mut poly_new =  vec![Scalar::<Secp256k1>::zero(); N] ;
+    let mut poly_new = vec![Scalar::<Secp256k1>::zero(); N];
     for i in 0..t {
         poly_new[locs_usize[i].clone()] = coeffs[i].clone();
     }
@@ -404,7 +404,7 @@ fn set_poly(coeffs: &[Scalar<Secp256k1>; t], locs: &[BigInt; t]) -> Vec<Scalar<S
 // We recall that if u and v have dimensions m and l, the outer product and the outer sum
 // are the ml-dimensional vectors whose (im + j)-th entry is ui · vj and ui + vj respectively.
 fn outer_product_t(u: &[Scalar<Secp256k1>], v: &[Scalar<Secp256k1>]) -> Vec<Scalar<Secp256k1>> {
-    let mut output: [Scalar<Secp256k1>; t * t] = unsafe { make_array!(t * t, Scalar::zero()) };
+    let mut output: [Scalar<Secp256k1>; t * t] = array_from_fn(|_| Scalar::zero());
     for i in 0..t {
         for j in 0..t {
             output[i * t + j] = &u[i] * &v[j];
@@ -418,7 +418,7 @@ fn outer_product_c(
     v: &Vec<Vec<Scalar<Secp256k1>>>,
 ) -> [Vec<Scalar<Secp256k1>>; c * c] {
     let mut output: [Vec<Scalar<Secp256k1>>; c * c] =
-        unsafe { make_array!(c * c, vec![Scalar::zero(); 2 * N]) };
+        array_from_fn(|_| vec![Scalar::zero(); 2 * N]);
     for i in 0..c {
         for j in 0..c {
             let mul_ij = poly_mul_f(&u[i], &v[j]);
@@ -431,7 +431,7 @@ fn outer_product_c(
 }
 
 fn outer_sum(u: &[BigInt], v: &[BigInt]) -> Vec<BigInt> {
-    let mut output: [BigInt; t * t] = unsafe { make_array!(t * t, BigInt::zero()) };
+    let mut output: [BigInt; t * t] = array_from_fn(|_| BigInt::zero());
     for i in 0..t {
         for j in 0..t {
             output[i * t + j] = &u[i] + &v[j];

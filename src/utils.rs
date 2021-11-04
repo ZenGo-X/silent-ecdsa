@@ -70,15 +70,17 @@ pub fn outer_add(u: &[BigInt], v: &[BigInt]) -> Vec<BigInt> {
 
  */
 
-#[macro_export]
-macro_rules! make_array {
-    ($n:expr, $constructor:expr) => {{
-        let mut items: [_; $n] = mem::MaybeUninit::uninit().assume_init();
-        for (_, place) in items.iter_mut().enumerate() {
-            ptr::write(place, $constructor);
-        }
-        items
-    }};
+// Can be replaced with https://github.com/rust-lang/rust/issues/89379 once stabilized.
+pub fn array_from_fn<F, T, const N: usize>(mut cb: F) -> [T; N]
+where
+    F: FnMut(usize) -> T,
+{
+    let mut idx = 0;
+    [(); N].map(|_| {
+        let res = cb(idx);
+        idx += 1;
+        res
+    })
 }
 
 mod tests {
