@@ -10,24 +10,32 @@ use curv::cryptographic_primitives::secret_sharing::{
 use curv::elliptic::curves::{Point, Scalar, Secp256k1};
 use curv::BigInt;
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 use std::convert::TryInto;
 use std::ops::{Add, Neg};
 use std::ptr;
 use std::{fs, mem};
 
+#[serde_as]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LongTermKey {
     pub alpha_i: Scalar<Secp256k1>,
     pub sk_i: Scalar<Secp256k1>,
+    #[serde_as(as = "[[_; t]; c]")]
     pub w_i: [[BigInt; t]; c],
+    #[serde_as(as = "[[_; t]; c]")]
     pub eta_i: [[BigInt; t]; c],
+    #[serde_as(as = "[[_; t]; c]")]
     pub beta_i: [[Scalar<Secp256k1>; t]; c],
+    #[serde_as(as = "[[_; t]; c]")]
     pub gamma_i: [[Scalar<Secp256k1>; t]; c],
     pub u_i_0: [[DSPF; (n - 1)]; c],
     pub u_i_1: [[DSPF; (n - 1)]; c],
     pub v_i_0: [[DSPF; (n - 1)]; c],
     pub v_i_1: [[DSPF; (n - 1)]; c],
+    #[serde_as(as = "[[_; (n - 1)]; c * c]")]
     pub c_i_0: [[DSPF; (n - 1)]; c * c],
+    #[serde_as(as = "[[_; (n - 1)]; c * c]")]
     pub c_i_1: [[DSPF; (n - 1)]; c * c],
     pub pk: Point<Secp256k1>,
 }
