@@ -231,6 +231,7 @@ mod tests {
 
     use crate::fft::{bit_rev_radix_2_intt, bit_rev_radix_2_ntt};
     use crate::poly::{poly_mod, poly_mod_cyclotomic, poly_mul, poly_mul_f, poly_mul_fft};
+    use crate::utils::array_from_fn;
     use curv::arithmetic::{Converter, Modulo, One, Samplable, Zero};
     use curv::cryptographic_primitives::secret_sharing::Polynomial;
     use curv::elliptic::curves::{Scalar, Secp256k1};
@@ -454,8 +455,7 @@ mod tests {
     #[test]
     fn test_poly_mod_edge_case() {
         // let a: Vec<_> = (0..63).map(|_| Scalar::<Secp256k1>::random()).collect();
-        let mut a: [Scalar<Secp256k1>; 34] =
-            unsafe { make_array!(34, Scalar::<Secp256k1>::zero()) };
+        let mut a: [Scalar<Secp256k1>; 34] = array_from_fn(|_| Scalar::zero());
         a[33] = Scalar::<Secp256k1>::random();
 
         let b: Vec<_> = (0..33).map(|_| Scalar::<Secp256k1>::random()).collect();
