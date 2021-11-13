@@ -1,8 +1,7 @@
 use crate::fft::{bit_rev_radix_2_intt, bit_rev_radix_2_ntt};
-use curv::arithmetic::{Converter, Zero};
-use curv::cryptographic_primitives::secret_sharing::{
-    ffts::multiply_polynomials, Polynomial, PolynomialDegree,
-};
+use curv::arithmetic::{Converter, Modulo, Zero};
+use curv::cryptographic_primitives::secret_sharing::PolynomialDegree;
+use curv::cryptographic_primitives::secret_sharing::{ffts::multiply_polynomials, Polynomial};
 use curv::elliptic::curves::{Scalar, Secp256k1};
 use curv::BigInt;
 use std::convert::TryInto;
@@ -25,7 +24,7 @@ pub fn poly_mod(
     }
     let a_poly = Polynomial::from_coefficients(a.to_vec());
     let b_poly = Polynomial::from_coefficients(b.to_vec());
-    let b_deg: usize = b_poly.degree().try_into().unwrap();
+    let b_deg = b_poly.degree();
     assert!(b_poly.degree() > PolynomialDegree::Finite(0));
 
     let mut a_trim = a.clone().to_vec();
@@ -35,19 +34,25 @@ pub fn poly_mod(
     if a_poly.degree() < b_poly.degree() {
         return ([Scalar::<Secp256k1>::zero()].to_vec(), a_trim);
     }
-    let b_poly_coef = b_poly.coefficients().to_vec();
-    let loc: usize = b_poly.degree().try_into().unwrap();
-    let lc_inv: Scalar<Secp256k1> = b_poly_coef[loc].clone().invert().unwrap();
-    let size_a: usize = a_poly.degree().try_into().unwrap();
-    let size_b: usize = b_poly.degree().try_into().unwrap();
-    let size: usize = size_a - size_b + 1;
-    let mut coef = vec![Scalar::<Secp256k1>::zero(); size];
+    let a_deg = match a_poly.degree() {
+        PolynomialDegree::Finite(n) => n,
+        PolynomialDegree::Infinity => panic!("b_poly shouldn't be the zero polynomial"),
+    };
+    let b_deg = match b_poly.degree() {
+        PolynomialDegree::Finite(n) => n,
+        PolynomialDegree::Infinity => panic!("b_poly shouldn't be the zero polynomial"),
+    };
+    let lc_inv = b_poly.coefficients()[b_deg].clone().invert().unwrap();
+    let mut coef = vec![Scalar::<Secp256k1>::zero(); (a_deg - b_deg + 1) as usize];
     let mut reminder_poly = a_trim_poly.clone();
     let mut reminder_coef = reminder_poly.coefficients().to_vec();
 
     while reminder_poly.degree() >= b_poly.degree() {
-        let rem_deg: usize = reminder_poly.degree().try_into().unwrap();
-        let d: usize = rem_deg - b_deg;
+        let d = match reminder_poly.degree() {
+            PolynomialDegree::Finite(n) => n,
+            PolynomialDegree::Infinity => break,
+        };
+        let d = d - b_deg;
         let c = &lc(&reminder_poly) * &lc_inv;
         for i in 0..b_deg as usize {
             reminder_coef[i + d] = &reminder_coef[i + d] - &c * &b_poly.coefficients().to_vec()[i];
@@ -122,8 +127,10 @@ fn trim(poly: &Vec<Scalar<Secp256k1>>) -> Vec<Scalar<Secp256k1>> {
 
 // largest coefficient
 fn lc(poly: &Polynomial<Secp256k1>) -> Scalar<Secp256k1> {
-    let loc: usize = poly.degree().try_into().unwrap();
-    poly.coefficients()[loc].clone()
+    match poly.degree() {
+        PolynomialDegree::Infinity => panic!("Shouldn't get zero polynomial here"),
+        PolynomialDegree::Finite(n) => poly.coefficients()[n].clone(),
+    }
 }
 
 // wrapper around poly_mul
