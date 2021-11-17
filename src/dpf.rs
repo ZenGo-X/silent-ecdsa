@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 // implementing https://eprint.iacr.org/2018/707.pdf figure 1
 
-use crate::utils::{prng, xor};
+use crate::utils::{prng, xor, xor_vecs};
 use crate::{LAMBDA, LAMBDA_BYTES_LEN, N};
 use curv::arithmetic::{BitManipulation, Converter, Modulo, One, Samplable, Zero};
 use curv::elliptic::curves::{Scalar, Secp256k1};
@@ -42,6 +42,7 @@ pub struct Key {
     pub s_i_0: [u8; LAMBDA_BYTES_LEN],
     pub CW_n_plus_1: CWnp1,
     pub CWs: Vec<CWi>,
+    pub tree_depth: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,6 +54,7 @@ impl DPF {
             s_i_0: [0; LAMBDA_BYTES_LEN],
             CW_n_plus_1: CWnp1(Scalar::zero()),
             CWs: vec![CWi::init(); u32::BITS as usize],
+            tree_depth: 0,
         };
         DPF(key)
     }
@@ -77,10 +79,11 @@ impl DPF {
         let mut t_0_i_minus_1 = t_0_0;
         let mut t_1_i_minus_1 = t_1_0;
         let mut CW_i_vec: Vec<CWi> = Vec::new();
-        for i in 0..n {
+        let bit_size = n;
+        for i in 0..bit_size {
             let prng_out_0_i = G(&s_0_i_minus_1);
             let prng_out_1_i = G(&s_1_i_minus_1);
-            let alpha_i_bn = alpha >> i & BigInt::one();
+            let alpha_i_bn = alpha >> (bit_size - 1 - i) & BigInt::one();
             let alpha_i = if alpha_i_bn > BigInt::zero() {
                 true
             } else {
@@ -133,8 +136,8 @@ impl DPF {
 
         let t_1_n = t_1_i_minus_1;
 
-        let s_0_n_fe = convert(s_0_n);
-        let s_1_n_fe = convert(s_1_n);
+        let s_0_n_fe = convert(&s_0_n);
+        let s_1_n_fe = convert(&s_1_n);
 
         let mut CW_n_plus_1 = s_1_n_fe + beta - &s_0_n_fe;
 
@@ -148,11 +151,13 @@ impl DPF {
             s_i_0: s_0_0.clone(),
             CW_n_plus_1: CWnp1(CW_n_plus_1.clone()),
             CWs: CW_i_vec.clone().try_into().unwrap(),
+            tree_depth: n,
         };
         let key1 = Key {
             s_i_0: s_1_0.clone(),
             CW_n_plus_1: CWnp1(CW_n_plus_1.clone()),
             CWs: CW_i_vec.try_into().unwrap(),
+            tree_depth: n,
         };
         (DPF(key0), DPF(key1))
     }
@@ -161,7 +166,8 @@ impl DPF {
         assert!(b <= &1u8);
         let mut s_i_minus_1 = self.0.s_i_0.to_vec();
         let mut t_i_minus_1 = b.clone();
-        for i in 0..BigInt::from(2 * N as u32).bit_length() {
+        let input_bit_length = BigInt::from(2 * N as u32).bit_length();
+        for i in 0..input_bit_length {
             let stst_i_concat = concat_s_t_values(
                 &self.0.CWs[i].s_CW.to_vec(),
                 &self.0.CWs[i].t_CW_L,
@@ -183,7 +189,7 @@ impl DPF {
             };
 
             let tau_i = split_s_t_values(&tau_i_vec);
-            let x_i_bn = x >> i & BigInt::one();
+            let x_i_bn = x >> (input_bit_length - 1 - i) & BigInt::one();
             let x_i = if x_i_bn > BigInt::zero() { true } else { false };
             s_i_minus_1 = if x_i { tau_i.s_i_R } else { tau_i.s_i_L };
             t_i_minus_1 = if x_i { tau_i.t_i_R } else { tau_i.t_i_L };
@@ -198,7 +204,7 @@ impl DPF {
         );
 
         let mut output = BigInt::mod_add(
-            &convert(s_n).to_bigint(),
+            &convert(&s_n).to_bigint(),
             &t_n_cw_n1,
             &Scalar::<Secp256k1>::group_order(),
         );
@@ -209,13 +215,108 @@ impl DPF {
         Scalar::from(&output)
     }
 
+    // This is an optimization that instead of iteratively evaluate the DpfKey
+    // in each address, we save time by computing the DPF over a range.
+    // This optimization is not explicitly stated in the original paper.
+    // But figure 4 in the paper gives part of the general sense
+    // behind the optimization.
+
+    fn full_eval_optimized_recursive(
+        &self,
+        id: &bool,
+        all_ones_path_bits: &Vec<bool>,
+        upper_bound_path_bits: &Vec<bool>,
+        control_bit: bool,
+        seed: &Vec<u8>,
+        current_depth: usize,
+    ) -> Vec<Scalar<Secp256k1>> {
+        if current_depth == self.0.tree_depth {
+            let mut output_val = convert(seed);
+            if control_bit {
+                output_val = output_val + &self.0.CW_n_plus_1.0;
+            }
+            if *id {
+                output_val = -output_val;
+            }
+            return vec![output_val];
+        }
+        let expanded_seed = G(&seed.to_vec());
+        let (mut seed_left, mut control_bit_left, mut seed_right, mut control_bit_right) = (
+            expanded_seed.s_i_L,
+            expanded_seed.t_i_L,
+            expanded_seed.s_i_R,
+            expanded_seed.t_i_R,
+        );
+        if control_bit {
+            xor_vecs(&mut seed_left, &self.0.CWs[current_depth].s_CW.to_vec());
+            xor_vecs(&mut seed_right, &self.0.CWs[current_depth].s_CW.to_vec());
+            control_bit_left ^= self.0.CWs[current_depth].t_CW_L;
+            control_bit_right ^= self.0.CWs[current_depth].t_CW_R;
+        }
+
+        if !upper_bound_path_bits[current_depth] {
+            self.full_eval_optimized_recursive(
+                id,
+                all_ones_path_bits,
+                upper_bound_path_bits,
+                control_bit_left != 0,
+                &seed_left,
+                current_depth + 1,
+            )
+        } else {
+            // We will set here all ones to that the left subtree will be evaluated fully.
+            let mut left_eval = self.full_eval_optimized_recursive(
+                id,
+                all_ones_path_bits,
+                all_ones_path_bits,
+                control_bit_left != 0,
+                &seed_left,
+                current_depth + 1,
+            );
+            let mut right_eval = self.full_eval_optimized_recursive(
+                id,
+                all_ones_path_bits,
+                upper_bound_path_bits,
+                control_bit_right != 0,
+                &seed_right,
+                current_depth + 1,
+            );
+            left_eval.append(&mut right_eval);
+            left_eval
+        }
+    }
+    // Evals for all i such that: 0 <= i < upper_bound
+    pub fn full_eval_optimized(&self, b: &bool, upper_bound: &BigInt) -> Vec<Scalar<Secp256k1>> {
+        let upper_bound_path_bits: Vec<bool> = (0..self.0.tree_depth)
+            .rev()
+            .map(|idx| upper_bound.test_bit(idx))
+            .collect();
+        let all_ones_path_bits: Vec<bool> = upper_bound_path_bits.iter().map(|_| true).collect();
+        let seed = &self.0.s_i_0.to_vec();
+        let control_bit = *b;
+        self.full_eval_optimized_recursive(
+            b,
+            &all_ones_path_bits,
+            &upper_bound_path_bits,
+            control_bit,
+            seed,
+            0,
+        )
+    }
     pub fn full_eval_N(&self, b: &u8) -> Vec<Scalar<Secp256k1>> {
+        self.full_eval_optimized(&(*b != 0), &BigInt::from((N - 1) as u64))
+    }
+    pub fn full_eval_N_naive(&self, b: &u8) -> Vec<Scalar<Secp256k1>> {
         (0..N)
             .map(|i| self.eval(b, &BigInt::from(i as u32)))
             .collect()
     }
 
     pub fn full_eval_2N(&self, b: &u8) -> Vec<Scalar<Secp256k1>> {
+        self.full_eval_optimized(&(*b != 0), &BigInt::from((2 * N - 1) as u64))
+    }
+
+    pub fn full_eval_2N_naive(&self, b: &u8) -> Vec<Scalar<Secp256k1>> {
         (0..2 * N)
             .map(|i| self.eval(b, &BigInt::from(i as u32)))
             .collect()
@@ -236,8 +337,8 @@ fn G(prng_in: &Vec<u8>) -> PrngOut {
 }
 
 // figure 3 in the paper. takes s and converts to Fq
-fn convert(s: Vec<u8>) -> Scalar<Secp256k1> {
-    let fe_vec = prng(&s);
+fn convert(s: &Vec<u8>) -> Scalar<Secp256k1> {
+    let fe_vec = prng(s);
     let bn = BigInt::from_bytes(&fe_vec[..]);
     Scalar::from(&bn)
 }
@@ -273,6 +374,7 @@ fn concat_s_t_values(s1: &Vec<u8>, t1: &u8, s2: &Vec<u8>, t2: &u8) -> Vec<u8> {
     [s_L, s_R].concat()
 }
 
+#[cfg(test)]
 mod tests {
     use crate::dpf::DPF;
     use crate::N;
@@ -297,5 +399,12 @@ mod tests {
                 );
             }
         }
+    }
+    #[test]
+    fn test_full_eval() {
+        let alpha = BigInt::from(10);
+        let beta = Scalar::from(1);
+        let (dpf0, _) = DPF::gen(&alpha, &beta);
+        assert_eq!(dpf0.full_eval_2N_naive(&0u8), dpf0.full_eval_2N(&0u8));
     }
 }

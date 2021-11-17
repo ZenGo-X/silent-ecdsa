@@ -2,7 +2,7 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 
-mod dpf;
+pub mod dpf;
 pub mod dspf;
 pub mod fft;
 

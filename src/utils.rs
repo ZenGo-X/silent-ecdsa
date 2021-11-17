@@ -11,7 +11,7 @@ use std::iter::FromIterator;
 use std::ops::BitXor;
 
 // prng from |lambda| to |2 lambda|
-pub fn prng(key: &[u8]) -> Vec<u8> {
+pub fn prng(key: &Vec<u8>) -> Vec<u8> {
     // TODO: handle 128 bits key
     let mut new_key = key.to_vec();
     while new_key.len() < 32 {
@@ -41,6 +41,9 @@ where
         Ordering::Equal => (),
     }
     res
+}
+pub fn xor_vecs(rhs: &mut Vec<u8>, lhs: &Vec<u8>) {
+    rhs.iter_mut().zip(lhs.iter()).for_each(|(r, l)| *r ^= *l);
 }
 
 /*
@@ -89,7 +92,7 @@ mod tests {
     #[test]
     fn test_prng_zero() {
         let key = [0u8; 32].to_vec();
-        let out = prng(&key[..]);
+        let out = prng(&key);
         println!("out : {:?}", out);
     }
 }
