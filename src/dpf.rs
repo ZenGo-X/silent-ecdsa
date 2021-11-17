@@ -215,6 +215,12 @@ impl DPF {
         Scalar::from(&output)
     }
 
+    // This is an optimization that instead of iteratively evaluate the DpfKey
+    // in each address, we save time by computing the DPF over a range.
+    // This optimization is not explicitly stated in the original paper.
+    // But figure 4 in the paper gives part of the general sense
+    // behind the optimization.
+
     fn full_eval_optimized_recursive(
         &self,
         id: &bool,
