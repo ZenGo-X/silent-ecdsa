@@ -232,22 +232,24 @@ impl DPF {
 
     fn full_eval_optimized_recursive(
         &self,
-        id: &bool,
+        id: bool,
         all_ones_path_bits: &Vec<bool>,
         upper_bound_path_bits: &Vec<bool>,
         control_bit: bool,
         seed: [u8; LAMBDA_BYTES_LEN],
         current_depth: usize,
-    ) -> Vec<Scalar<Secp256k1>> {
+        output_vec: &mut Vec<Scalar<Secp256k1>>,
+    ) {
         if current_depth == self.0.tree_depth {
             let mut output_val = convert(seed);
             if control_bit {
                 output_val = output_val + &self.0.CW_n_plus_1.0;
             }
-            if *id {
+            if id {
                 output_val = -output_val;
             }
-            return vec![output_val];
+            output_vec.push(output_val);
+            return;
         }
         let expanded_seed = G(seed);
         let (mut seed_left, mut control_bit_left, mut seed_right, mut control_bit_right) = (
@@ -271,6 +273,7 @@ impl DPF {
                 control_bit_left != 0,
                 seed_left,
                 current_depth + 1,
+                output_vec,
             )
         } else {
             // We will set here all ones to that the left subtree will be evaluated fully.
@@ -281,6 +284,7 @@ impl DPF {
                 control_bit_left != 0,
                 seed_left,
                 current_depth + 1,
+                output_vec,
             );
             let mut right_eval = self.full_eval_optimized_recursive(
                 id,
@@ -289,20 +293,22 @@ impl DPF {
                 control_bit_right != 0,
                 seed_right,
                 current_depth + 1,
+                output_vec,
             );
-            left_eval.append(&mut right_eval);
-            left_eval
+            // left_eval.append(&mut right_eval);
+            // left_eval
         }
     }
     // Evals for all i such that: 0 <= i < upper_bound
-    pub fn full_eval_optimized(&self, b: &bool, upper_bound: &BigInt) -> Vec<Scalar<Secp256k1>> {
+    pub fn full_eval_optimized(&self, b: bool, upper_bound: usize) -> Vec<Scalar<Secp256k1>> {
         let upper_bound_path_bits: Vec<bool> = (0..self.0.tree_depth)
             .rev()
-            .map(|idx| upper_bound.test_bit(idx))
+            .map(|idx| ((upper_bound >> idx) & 1) != 0)
             .collect();
         let all_ones_path_bits: Vec<bool> = upper_bound_path_bits.iter().map(|_| true).collect();
         let seed = self.0.s_i_0.clone();
-        let control_bit = *b;
+        let control_bit = b;
+        let mut output_vec = Vec::<Scalar<Secp256k1>>::with_capacity(upper_bound + 1);
         self.full_eval_optimized_recursive(
             b,
             &all_ones_path_bits,
@@ -310,26 +316,28 @@ impl DPF {
             control_bit,
             seed,
             0,
-        )
+            &mut output_vec,
+        );
+        output_vec
     }
-    pub fn full_eval_N(&self, b: &u8) -> Vec<Scalar<Secp256k1>> {
-        self.full_eval_optimized(&(*b != 0), &BigInt::from((N - 1) as u64))
+    pub fn full_eval_N(&self, b: u8) -> Vec<Scalar<Secp256k1>> {
+        self.full_eval_optimized(b != 0, N - 1)
     }
-    // pub fn full_eval_N_naive(&self, b: &u8) -> Vec<Scalar<Secp256k1>> {
-    //     (0..N)
-    //         .map(|i| self.eval(b, &BigInt::from(i as u32)))
-    //         .collect()
-    // }
-
-    pub fn full_eval_2N(&self, b: &u8) -> Vec<Scalar<Secp256k1>> {
-        self.full_eval_optimized(&(*b != 0), &BigInt::from((2 * N - 1) as u64))
+    pub fn full_eval_N_naive(&self, b: u8) -> Vec<Scalar<Secp256k1>> {
+        (0..N)
+            .map(|i| self.eval(b, &BigInt::from(i as u32)))
+            .collect()
     }
 
-    // pub fn full_eval_2N_naive(&self, b: &u8) -> Vec<Scalar<Secp256k1>> {
-    //     (0..2 * N)
-    //         .map(|i| self.eval(b, &BigInt::from(i as u32)))
-    //         .collect()
-    // }
+    pub fn full_eval_2N(&self, b: u8) -> Vec<Scalar<Secp256k1>> {
+        self.full_eval_optimized(b != 0, 2 * N - 1)
+    }
+
+    pub fn full_eval_2N_naive(&self, b: &u8) -> Vec<Scalar<Secp256k1>> {
+        (0..2 * N)
+            .map(|i| self.eval(*b, &BigInt::from(i as u32)))
+            .collect()
+    }
 }
 
 fn G(mut prng_in: [u8; LAMBDA_BYTES_LEN]) -> PrngOut {
@@ -364,21 +372,6 @@ fn split_s_t_values(input: [u8; LAMBDA_BYTES_LEN * 2]) -> PrngOut {
             .expect("Length is correct, shouldn't happen!"),
         t_i_R: input[LAMBDA_BYTES_LEN] & 1,
     }
-
-    // let s_R = &mut input[..LAMBDA_BYTES_LEN];
-    // let s_L = &mut input[LAMBDA_BYTES_LEN..LAMBDA_BYTES_LEN * 2];
-
-    // let t_R = s_R[0] & 1;
-    // let t_L = s_L[0] & 1;
-    // s_R[0] = s_R[0] & 0xfe;
-    // s_L[0] = s_L[0] & 0xfe;
-
-    // PrngOut {
-    //     s_i_L: s_L,
-    //     t_i_L: t_L,
-    //     s_i_R: s_R,
-    //     t_i_R: t_R,
-    // }
 }
 // takes s1,t1,s2,t2 and outputs [s1||t1||s2||t2]
 fn concat_s_t_values(
@@ -408,8 +401,8 @@ mod tests {
         let alpha = 10;
         let beta = Scalar::random();
         let (dpf0, dpf1) = DPF::gen(&BigInt::from(alpha as u64), &beta);
-        let full_eval_0 = dpf0.full_eval_2N(&0u8);
-        let full_eval_1 = dpf1.full_eval_2N(&1u8);
+        let full_eval_0 = dpf0.full_eval_2N(0u8);
+        let full_eval_1 = dpf1.full_eval_2N(1u8);
         for x in 0..2 * N {
             let fe0 = &full_eval_0[x];
             let fe1 = &full_eval_1[x];
