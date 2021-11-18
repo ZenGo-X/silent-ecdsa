@@ -43,7 +43,7 @@ impl DSPF {
         assert!(x >= &BigInt::zero());
         self.key
             .iter()
-            .fold(Scalar::zero(), |acc, dpf| acc + dpf.eval(b, x))
+            .fold(Scalar::zero(), |acc, dpf| acc + dpf.eval(*b, x))
     }
 
     pub fn full_eval_N(&self, b: &u8) -> Vec<Scalar<Secp256k1>> {
@@ -63,6 +63,7 @@ impl DSPF {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use crate::dspf::DSPF;
     use crate::N;
@@ -78,10 +79,12 @@ mod tests {
         let mut fe1_vec = Vec::new();
 
         let (key0, key1) = DSPF::gen(&alpha_vec[..], &beta_vec[..]);
+        let full_eval_0 = key0.full_eval_N(&0);
+        let full_eval_1 = key1.full_eval_N(&1);
         for x in 0..N {
             let x_bn = BigInt::from(x as u32);
-            let fe0 = key0.eval(&0u8, &x_bn, false);
-            let fe1 = key1.eval(&1u8, &x_bn, false);
+            let fe0 = &full_eval_0[x];
+            let fe1 = &full_eval_1[x];
 
             fe0_vec.push(fe0.clone());
             fe1_vec.push(fe1.clone());

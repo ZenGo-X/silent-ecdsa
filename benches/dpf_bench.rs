@@ -16,7 +16,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("Naive", &size), &size, |b, size| {
             b.iter(|| {
                 let x: Vec<Scalar<Secp256k1>> = (0..*size)
-                    .map(|i| dpf0.eval(&0u8, &BigInt::from(i as u32)))
+                    .map(|i| dpf0.eval(0u8, &BigInt::from(i as u32)))
                     .collect();
                 black_box(x);
             })
