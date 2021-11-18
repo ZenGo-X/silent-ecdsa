@@ -13,15 +13,8 @@ use std::ops::BitXor;
 // prng from |lambda| to |2 lambda|
 pub fn prng(key: [u8; LAMBDA_BYTES_LEN]) -> [u8; LAMBDA_BYTES_LEN * 2] {
     // TODO: handle 128 bits key
-    // while key.len() < 32 {
-    //     key.extend_from_slice(key);
-    // }
-    let zeros = [0; LAMBDA_BYTES_LEN];
-    let mut extended_key = [key, zeros]
-        .concat()
-        .try_into()
-        .expect("Lengths should be correct here");
-    // extended_key.copy_from_slice(&key);
+    let mut extended_key = [0; LAMBDA_BYTES_LEN * 2];
+    extended_key[..LAMBDA_BYTES_LEN].copy_from_slice(&key);
     let mut rng = ChaCha20Rng::from_seed(extended_key);
     let mut out = [0; LAMBDA_BYTES_LEN * 2];
     rng.try_fill_bytes(&mut out[..]);
