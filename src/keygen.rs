@@ -202,12 +202,12 @@ impl LongTermKey {
             y_i = poly_add_f(&y_i[..], &a_r_mul_v_i_r[..]).try_into().unwrap();
 
             for j in 0..n - 1 {
-                let M_i_j_r_tilde = &self.u_i_0[r][j].full_eval_N(&0u8);
-                let K_i_j_r_tilde = &self.u_i_1[r][j].full_eval_N(&1u8);
+                let M_i_j_r_tilde = &self.u_i_0[r][j].full_eval_N(0u8);
+                let K_i_j_r_tilde = &self.u_i_1[r][j].full_eval_N(1u8);
 
-                v_i_r_tilde = poly_add_f(&v_i_r_tilde, &self.v_i_0[r][j].full_eval_N(&0u8));
+                v_i_r_tilde = poly_add_f(&v_i_r_tilde, &self.v_i_0[r][j].full_eval_N(0u8));
                 v_i_r_tilde = poly_mod(&v_i_r_tilde, f_x.coefficients()).1;
-                v_i_r_tilde = poly_add_f(&v_i_r_tilde, &self.v_i_1[r][j].full_eval_N(&1u8));
+                v_i_r_tilde = poly_add_f(&v_i_r_tilde, &self.v_i_1[r][j].full_eval_N(1u8));
                 v_i_r_tilde = poly_mod(&v_i_r_tilde, f_x.coefficients()).1;
 
                 let a_r_mul_M_i_j_r_tilde =
@@ -257,7 +257,7 @@ impl LongTermKey {
                         &poly_add_f(
                             &w_i_r_s[..],
                             &poly_mod(
-                                &self.c_i_0[r * c + s][j].full_eval_2N(&0u8),
+                                &self.c_i_0[r * c + s][j].full_eval_2N(0u8),
                                 f_x.coefficients(),
                             )
                             .1[..],
@@ -269,7 +269,7 @@ impl LongTermKey {
                         &poly_add_f(
                             &w_i_r_s[..],
                             &poly_mod(
-                                &self.c_i_1[r * c + s][j].full_eval_2N(&1u8),
+                                &self.c_i_1[r * c + s][j].full_eval_2N(1u8),
                                 f_x.coefficients(),
                             )
                             .1[..],

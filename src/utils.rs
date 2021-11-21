@@ -11,39 +11,44 @@ use std::iter::FromIterator;
 use std::ops::BitXor;
 
 // prng from |lambda| to |2 lambda|
-pub fn prng(key: &Vec<u8>) -> Vec<u8> {
+pub fn prng(key: [u8; LAMBDA_BYTES_LEN]) -> [u8; LAMBDA_BYTES_LEN * 2] {
     // TODO: handle 128 bits key
-    let mut new_key = key.to_vec();
-    while new_key.len() < 32 {
-        new_key.extend_from_slice(key);
-    }
-    let mut rng = ChaCha20Rng::from_seed(new_key[0..32].try_into().unwrap());
+    let mut extended_key = [0; LAMBDA_BYTES_LEN * 2];
+    extended_key[..LAMBDA_BYTES_LEN].copy_from_slice(&key);
+    let mut rng = ChaCha20Rng::from_seed(extended_key);
     let mut out = [0; LAMBDA_BYTES_LEN * 2];
-    let _ = rng.try_fill_bytes(&mut out[..]);
-    out.into()
+    rng.try_fill_bytes(&mut out[..]);
+    out
 }
 
-pub fn xor<T>(a: &[T], b: &[T]) -> Vec<T>
-where
-    T: BitXor + Clone,
-    Vec<T>: FromIterator<<T as BitXor>::Output>,
-{
-    let min = min(a.len(), b.len());
-    let max = max(a.len(), b.len());
-    let mut res: Vec<_> = a[0..min]
-        .iter()
-        .zip(b[0..min].to_vec())
-        .map(|byte| byte.0.clone().bitxor(byte.1.clone()))
-        .collect();
-    match a.len().cmp(&b.len()) {
-        Ordering::Less => res.extend_from_slice(&b[min..max]),
-        Ordering::Greater => res.extend_from_slice(&a[min..max]),
-        Ordering::Equal => (),
-    }
-    res
+// pub fn xor<T>(a: &[T], b: &[T]) -> Vec<T>
+// where
+//     T: BitXor + Clone,
+//     Vec<T>: FromIterator<<T as BitXor>::Output>,
+// {
+//     let min = min(a.len(), b.len());
+//     let max = max(a.len(), b.len());
+//     let mut res: Vec<_> = a[0..min]
+//         .iter()
+//         .zip(b[0..min].to_vec())
+//         .map(|byte| byte.0.clone().bitxor(byte.1.clone()))
+//         .collect();
+//     match a.len().cmp(&b.len()) {
+//         Ordering::Less => res.extend_from_slice(&b[min..max]),
+//         Ordering::Greater => res.extend_from_slice(&a[min..max]),
+//         Ordering::Equal => (),
+//     }
+//     res
+// }
+pub fn xor_slices_in_place<const N: usize>(lhs: &mut [u8; N], rhs: &[u8; N]) {
+    lhs.iter_mut().zip(rhs.iter()).for_each(|(l, r)| *l ^= *r);
 }
-pub fn xor_vecs(rhs: &mut Vec<u8>, lhs: &Vec<u8>) {
-    rhs.iter_mut().zip(lhs.iter()).for_each(|(r, l)| *r ^= *l);
+pub fn xor_slices<const N: usize>(op1: &[u8; N], op2: &[u8; N]) -> [u8; N] {
+    let mut out: [u8; N] = op1.clone();
+    out.iter_mut()
+        .zip(op2.iter())
+        .for_each(|(out, op2_e)| *out ^= *op2_e);
+    out
 }
 
 /*
@@ -91,8 +96,8 @@ mod tests {
 
     #[test]
     fn test_prng_zero() {
-        let key = [0u8; 32].to_vec();
-        let out = prng(&key);
+        let key = [0u8; 16];
+        let out = prng(key);
         println!("out : {:?}", out);
     }
 }
