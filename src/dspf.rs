@@ -1,9 +1,11 @@
-use crate::dpf::DPF;
-use crate::N;
 use curv::arithmetic::Zero;
 use curv::elliptic::curves::{Scalar, Secp256k1};
 use curv::BigInt;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+
+use crate::dpf::DPF;
+use crate::N;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DSPF {
@@ -47,19 +49,33 @@ impl DSPF {
     }
 
     pub fn full_eval_N(&self, b: u8) -> Vec<Scalar<Secp256k1>> {
-        let zero_vec = vec![Scalar::zero(); N];
-        self.key.iter().fold(zero_vec, |acc, dpf_key| {
-            let dpf_i_full_eval = dpf_key.full_eval_N(b);
-            (0..N).map(|i| &acc[i] + &dpf_i_full_eval[i]).collect()
-        })
+        self.key
+            .par_iter()
+            .map(|dpf_key| dpf_key.full_eval_N(b))
+            .reduce(
+                || vec![Scalar::zero(); N],
+                |mut a, b| {
+                    a.iter_mut()
+                        .zip(&b)
+                        .for_each(|(a_i, b_i)| *a_i = &*a_i + b_i);
+                    a
+                },
+            )
     }
 
     pub fn full_eval_2N(&self, b: u8) -> Vec<Scalar<Secp256k1>> {
-        let zero_vec = vec![Scalar::zero(); 2 * N];
-        self.key.iter().fold(zero_vec, |acc, dpf_key| {
-            let dpf_i_full_eval = dpf_key.full_eval_2N(b);
-            (0..2 * N).map(|i| &acc[i] + &dpf_i_full_eval[i]).collect()
-        })
+        self.key
+            .par_iter()
+            .map(|dpf_key| dpf_key.full_eval_2N(b))
+            .reduce(
+                || vec![Scalar::zero(); 2 * N],
+                |mut a, b| {
+                    a.iter_mut()
+                        .zip(&b)
+                        .for_each(|(a_i, b_i)| *a_i = &*a_i + b_i);
+                    a
+                },
+            )
     }
 }
 
