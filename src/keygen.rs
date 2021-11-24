@@ -2,19 +2,17 @@ use crate::dspf::DSPF;
 use crate::poly::{poly_add_f, poly_mod, poly_mul_f, poly_mul_f_naive};
 use crate::utils::array_from_fn;
 use crate::{c, n, t, N};
-use curv::arithmetic::{Converter, Modulo, One, Samplable, Zero};
-use curv::cryptographic_primitives::secret_sharing::{
-    ffts::{PowerIterator, PRIMITIVE_ROOT_OF_UNITY, ROOT_OF_UNITY_BASIC_ORDER},
-    Polynomial,
-};
-use curv::elliptic::curves::{Point, Scalar, Secp256k1};
+use curv::arithmetic::{BasicOps, Converter, Modulo, One, Samplable, Zero};
+use curv::cryptographic_primitives::secret_sharing::{ffts::PowerIterator, Polynomial};
+use curv::elliptic::curves::{ECScalar, Point, Scalar, Secp256k1};
 use curv::BigInt;
+use rand::{random, Rng};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
+use std::convert::TryFrom;
 use std::convert::TryInto;
-use std::ops::{Add, Neg};
-use std::ptr;
-use std::{fs, mem};
+use std::fs;
+use std::ops::{Add, Mul, Neg};
 
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize)]
@@ -22,9 +20,9 @@ pub struct LongTermKey {
     pub alpha_i: Scalar<Secp256k1>,
     pub sk_i: Scalar<Secp256k1>,
     #[serde_as(as = "[[_; t]; c]")]
-    pub w_i: [[BigInt; t]; c],
+    pub w_i: [[u32; t]; c],
     #[serde_as(as = "[[_; t]; c]")]
-    pub eta_i: [[BigInt; t]; c],
+    pub eta_i: [[u32; t]; c],
     #[serde_as(as = "[[_; t]; c]")]
     pub beta_i: [[Scalar<Secp256k1>; t]; c],
     #[serde_as(as = "[[_; t]; c]")]
@@ -55,8 +53,8 @@ impl LongTermKey {
         LongTermKey {
             alpha_i: Scalar::zero(),
             sk_i: Scalar::zero(),
-            w_i: array_from_fn(|_| array_from_fn(|_| BigInt::zero())),
-            eta_i: array_from_fn(|_| array_from_fn(|_| BigInt::zero())),
+            w_i: array_from_fn(|_| array_from_fn(|_| 0u32)),
+            eta_i: array_from_fn(|_| array_from_fn(|_| 0u32)),
             beta_i: array_from_fn(|_| array_from_fn(|_| Scalar::zero())),
             gamma_i: array_from_fn(|_| array_from_fn(|_| Scalar::zero())),
             u_i_0: array_from_fn(|_| array_from_fn(|_| DSPF::init(t * (n - 1)))),
@@ -317,14 +315,30 @@ pub fn pick_f_x() -> (Polynomial<Secp256k1>, Vec<Scalar<Secp256k1>>) {
     let mut roots = Vec::new();
     let mut a = vec![Scalar::<Secp256k1>::zero(); N + 1];
     let mut b = vec![Scalar::<Secp256k1>::zero(); N + 1];
-    if ROOT_OF_UNITY_BASIC_ORDER % N != 0 {
+    let small_factor_threshold = BigInt::from(1000);
+    let small_factors: Vec<&(BigInt, u32)> =
+        Scalar::<Secp256k1>::multiplicative_group_order_factorization()
+            .iter()
+            .filter(|(factor, _)| factor < &small_factor_threshold)
+            .collect();
+    let smooth_order = small_factors
+        .iter()
+        .fold(BigInt::one(), |acc, (factor, exp)| acc * (factor.pow(*exp)));
+    let group_order = Scalar::<Secp256k1>::group_order();
+    let multiplicative_smooth_group_generator = BigInt::mod_pow(
+        &Scalar::<Secp256k1>::primitive_root_of_unity().to_bigint(),
+        &(&(group_order - BigInt::one()) / &smooth_order),
+        group_order,
+    );
+    let u32_N = u32::try_from(N).expect("N should fit into u32");
+    if !&smooth_order.modulus(&BigInt::from(u32_N)).is_zero() {
         panic!("Order must devide multiplicative group order of Secp256k1");
     }
     a[0] = Scalar::from_bigint(&BigInt::one());
     PowerIterator::new(
         Scalar::<Secp256k1>::from_bigint(&BigInt::mod_pow(
-            &BigInt::from_str_radix(PRIMITIVE_ROOT_OF_UNITY, 10).unwrap(),
-            &BigInt::from((ROOT_OF_UNITY_BASIC_ORDER / N) as u64),
+            &multiplicative_smooth_group_generator,
+            &(&smooth_order / &BigInt::from(u32_N)),
             &Scalar::<Secp256k1>::group_order(),
         )),
         N,
@@ -350,22 +364,22 @@ pub fn pick_f_x() -> (Polynomial<Secp256k1>, Vec<Scalar<Secp256k1>>) {
     return (Polynomial::from_coefficients(a), roots);
 }
 
-fn pick_N_t() -> [BigInt; t] {
+fn pick_N_t() -> [u32; t] {
+    let mut trng = rand::thread_rng();
+    let u32_N = u32::try_from(N).expect("N should fit into u32");
     assert!(t < N);
-    let mut candidate_vec: Vec<BigInt>;
-    candidate_vec = (0..t)
-        .map(|_| BigInt::sample_below(&BigInt::from(N as u32)))
-        .collect::<Vec<BigInt>>();
-    candidate_vec.sort();
-    candidate_vec.dedup();
-    while candidate_vec.len() < t {
-        candidate_vec = (0..t)
-            .map(|_| BigInt::sample_below(&BigInt::from(N as u32)))
-            .collect::<Vec<BigInt>>();
-        candidate_vec.sort();
-        candidate_vec.dedup();
+    let mut candidate_vec = [0u32; t];
+    let mut i = 0;
+    while i < t {
+        let candidate: u32 = trng.gen_range(0..u32_N);
+        if candidate_vec[..i].contains(&candidate) {
+            continue;
+        }
+        candidate_vec[i] = candidate;
+        i += 1;
     }
-    candidate_vec.try_into().unwrap()
+    candidate_vec.sort();
+    candidate_vec
 }
 
 fn pick_Fq_t() -> [Scalar<Secp256k1>; t] {
@@ -385,17 +399,20 @@ fn pick_R() -> Vec<Scalar<Secp256k1>> {
 }
 
 // set up a ploynomial of degree N from t<N coeffs at locations locs
-fn set_poly(coeffs: &[Scalar<Secp256k1>; t], locs: &[BigInt; t]) -> Vec<Scalar<Secp256k1>> {
+fn set_poly(coeffs: &[Scalar<Secp256k1>; t], locs: &[u32; t]) -> Vec<Scalar<Secp256k1>> {
     let locs_usize: Vec<_> = (0..locs.len())
         .map(|i| {
-            let mut bytes_arr = [0u8; 4];
-            let mut bytes = locs[i].to_bytes();
-            bytes.reverse();
+            usize::try_from(locs[i])
+                .expect("usize should be large enough to represent locs elements")
+            // let mut bytes_arr = [0u8; 4];
+            // // let mut bytes = locs[i].to_bytes();
+            // let mut bytes = locs[i].to_be_bytes();
+            // bytes.reverse();
 
-            for j in 0..bytes.len() {
-                bytes_arr[j] = bytes[j].clone();
-            }
-            u32::from_le_bytes(bytes_arr) as usize
+            // for j in 0..bytes.len() {
+            //     bytes_arr[j] = bytes[j].clone();
+            // }
+            // u32::from_le_bytes(bytes_arr) as usize
         })
         .collect();
     for i in 0..locs_usize.len() {
@@ -438,12 +455,12 @@ fn outer_product_c(
     output
 }
 
-fn outer_sum(u: &[BigInt], v: &[BigInt]) -> Vec<BigInt> {
-    let mut output: [BigInt; t * t] = array_from_fn(|_| BigInt::zero());
+fn outer_sum(u: &[u32; t], v: &[u32; t]) -> [u32; t * t] {
+    let mut output = [0u32; t * t];
     for i in 0..t {
         for j in 0..t {
             output[i * t + j] = &u[i] + &v[j];
         }
     }
-    output.to_vec()
+    output
 }

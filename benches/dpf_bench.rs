@@ -9,7 +9,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("dpf");
     let plot_config = PlotConfiguration::default().summary_scale(criterion::AxisScale::Logarithmic);
     group.plot_config(plot_config);
-    let alpha = &BigInt::from(10);
+    let alpha = &10u32;
     let beta = &Scalar::random();
     let (dpf0, _) = DPF::gen(alpha, beta);
     for size in bench_sizes {

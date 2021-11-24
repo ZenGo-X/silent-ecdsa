@@ -60,7 +60,7 @@ impl DPF {
         DPF(key)
     }
 
-    pub fn gen(alpha: &BigInt, beta: &Scalar<Secp256k1>) -> (Self, Self) {
+    pub fn gen(alpha: &u32, beta: &Scalar<Secp256k1>) -> (Self, Self) {
         let mut s_0_0: [u8; LAMBDA_BYTES_LEN] = BigInt::sample(LAMBDA * 2).to_bytes()
             [0..LAMBDA_BYTES_LEN]
             .try_into()
@@ -74,8 +74,9 @@ impl DPF {
         let t_1_0: u8 = 1;
         s_0_0[0] = s_0_0[0] & 0xfe;
         s_1_0[0] = s_1_0[0] & 0xfe;
-        let n = usize::try_from(usize::BITS - usize::leading_ones(2 * N))
+        let n = usize::try_from(usize::BITS - usize::leading_zeros(2 * N))
             .expect("Number of bits should be small");
+        // let n = 32;
         let mut s_0_i_minus_1 = s_0_0;
         let mut s_1_i_minus_1 = s_1_0;
         let mut t_0_i_minus_1 = t_0_0;
@@ -85,7 +86,9 @@ impl DPF {
         for i in 0..bit_size {
             let prng_out_0_i = G(s_0_i_minus_1);
             let prng_out_1_i = G(s_1_i_minus_1);
-            let alpha_i = (alpha >> (bit_size - 1 - i)).test_bit(0);
+            // let alpha_i = (alpha >> (bit_size - 1 - i)).test_bit(0);
+            let alpha_i = ((*alpha >> (bit_size - 1 - i)) & 1) != 0;
+            println!("i: {}, alpha_i: {}", i, alpha_i);
             let (s_0_Lose, s_0_Keep) = if alpha_i {
                 (prng_out_0_i.s_i_L, prng_out_0_i.s_i_R)
             } else {
@@ -387,18 +390,19 @@ mod tests {
     use crate::N;
     use curv::elliptic::curves::{Scalar, Secp256k1};
     use curv::BigInt;
+    use std::convert::TryFrom;
 
     #[test]
     fn test_simple_dpf() {
-        let alpha = 10;
+        let alpha = 10u32;
         let beta = Scalar::random();
-        let (dpf0, dpf1) = DPF::gen(&BigInt::from(alpha as u64), &beta);
+        let (dpf0, dpf1) = DPF::gen(&alpha, &beta);
         let full_eval_0 = dpf0.full_eval_2N(0u8);
         let full_eval_1 = dpf1.full_eval_2N(1u8);
         for x in 0..2 * N {
             let fe0 = &full_eval_0[x];
             let fe1 = &full_eval_1[x];
-            if x == alpha {
+            if u32::try_from(x).expect("2*N should fit into u32") == alpha {
                 assert_eq!(fe0 + fe1, beta);
             } else {
                 assert_eq!(
