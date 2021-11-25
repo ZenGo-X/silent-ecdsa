@@ -3,6 +3,7 @@ use curv::elliptic::curves::{Scalar, Secp256k1};
 use curv::BigInt;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::convert::TryFrom;
 
 use crate::dpf::DPF;
 use crate::N;
@@ -22,14 +23,15 @@ impl DSPF {
         }
         dspf
     }
-    pub fn gen(alpha_vec: &[BigInt], beta_vec: &[Scalar<Secp256k1>]) -> (Self, Self) {
+    pub fn gen(alpha_vec: &[u32], beta_vec: &[Scalar<Secp256k1>]) -> (Self, Self) {
         // TODO: make sure there are no repetitions in alpha_vec?
         let alpha_vec_len = alpha_vec.len();
         assert_eq!(alpha_vec_len, beta_vec.len());
+        let two_N = u32::try_from(2 * N).expect("2*N should fit into u32");
         let (key0, key1): (Vec<_>, Vec<_>) = (0..alpha_vec_len)
             .map(|i| {
-                assert!(alpha_vec[i] >= BigInt::zero());
-                assert!(alpha_vec[i] < BigInt::from(2) * BigInt::from(N as u32));
+                // assert!(alpha_vec[i] >= BigInt::zero());
+                assert!(alpha_vec[i] < two_N);
                 DPF::gen(&alpha_vec[i], &beta_vec[i])
             })
             .unzip();
@@ -84,11 +86,12 @@ mod tests {
     use crate::dspf::DSPF;
     use crate::N;
     use curv::elliptic::curves::{Scalar, Secp256k1};
-    use curv::BigInt;
+    use std::convert::TryFrom;
 
     #[test]
     fn test_simple_dspf_eval_and_full_eval() {
-        let alpha_vec = &[BigInt::from(10), BigInt::from(20), BigInt::from(30)].to_vec();
+        // let alpha_vec = &[BigInt::from(10), BigInt::from(20), BigInt::from(30)].to_vec();
+        let alpha_vec = [10, 20, 30].to_vec();
         let beta_vec: &[Scalar<Secp256k1>] =
             &[Scalar::random(), Scalar::random(), Scalar::random()].to_vec();
         let mut fe0_vec = Vec::new();
@@ -98,18 +101,18 @@ mod tests {
         let full_eval_0 = key0.full_eval_N(0);
         let full_eval_1 = key1.full_eval_N(1);
         for x in 0..N {
-            let x_bn = BigInt::from(x as u32);
             let fe0 = &full_eval_0[x];
             let fe1 = &full_eval_1[x];
 
             fe0_vec.push(fe0.clone());
             fe1_vec.push(fe1.clone());
+            let x: u32 = u32::try_from(x).expect("N should fit into u32");
 
-            if x_bn == alpha_vec[0] {
+            if u32::try_from(x).expect("N should fit into u32") == alpha_vec[0] {
                 assert_eq!(fe0 + fe1, beta_vec[0]);
-            } else if x_bn == alpha_vec[1] {
+            } else if x == alpha_vec[1] {
                 assert_eq!(fe0 + fe1, beta_vec[1]);
-            } else if x_bn == alpha_vec[2] {
+            } else if x == alpha_vec[2] {
                 assert_eq!(fe0 + fe1, beta_vec[2]);
             } else {
                 assert_eq!(
